@@ -1,4 +1,5 @@
 import AppKit
+import LightsOutCore
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var configManager: ConfigManager!

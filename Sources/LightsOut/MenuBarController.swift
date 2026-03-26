@@ -1,4 +1,5 @@
 import AppKit
+import LightsOutCore
 import SwiftUI
 
 class MenuBarController {

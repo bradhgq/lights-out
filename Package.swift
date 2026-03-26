@@ -5,8 +5,13 @@ let package = Package(
     name: "LightsOut",
     platforms: [.macOS(.v13)],
     targets: [
+        .target(
+            name: "LightsOutCore",
+            path: "Sources/LightsOutCore"
+        ),
         .executableTarget(
             name: "LightsOut",
+            dependencies: ["LightsOutCore"],
             path: "Sources/LightsOut",
             swiftSettings: [
                 .define("DEV_MODE", .when(configuration: .debug)),
@@ -23,6 +28,11 @@ let package = Package(
         .executableTarget(
             name: "LightsOutHelper",
             path: "Sources/LightsOutHelper"
+        ),
+        .executableTarget(
+            name: "LightsOutTests",
+            dependencies: ["LightsOutCore"],
+            path: "Tests/LightsOutTests"
         ),
     ]
 )

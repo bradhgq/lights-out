@@ -1,11 +1,5 @@
 import Foundation
-
-enum Phase: String, Codable {
-    case idle
-    case amber
-    case windDown
-    case lightsOut
-}
+import LightsOutCore
 
 protocol PhaseManagerDelegate: AnyObject {
     func phaseDidChange(to phase: Phase)
@@ -31,7 +25,7 @@ class PhaseManager {
     func updateConfig(_ newConfig: LightsOutConfig) {
         self.config = newConfig
         if !devMode {
-            let newPhase = computePhase()
+            let newPhase = computePhase(config: config, at: Date())
             if newPhase != currentPhase {
                 let oldPhase = currentPhase
                 currentPhase = newPhase
@@ -45,8 +39,7 @@ class PhaseManager {
     }
 
     func start() {
-        // Determine initial phase based on current time
-        let newPhase = computePhase()
+        let newPhase = computePhase(config: config, at: Date())
         if newPhase != currentPhase {
             currentPhase = newPhase
             delegate?.phaseDidChange(to: currentPhase)
@@ -62,7 +55,6 @@ class PhaseManager {
     func stop() {
         timer?.invalidate()
         timer = nil
-
     }
 
     // MARK: - Dev Mode
@@ -72,9 +64,7 @@ class PhaseManager {
         Constants.devMode = enabled
         if !enabled {
             devOverride = nil
-    
-            // Re-evaluate real phase
-            let newPhase = computePhase()
+            let newPhase = computePhase(config: config, at: Date())
             if newPhase != currentPhase {
                 currentPhase = newPhase
                 delegate?.phaseDidChange(to: currentPhase)
@@ -98,11 +88,10 @@ class PhaseManager {
 
     private func tick() {
         if devMode {
-            // In dev mode, don't auto-compute phase from clock
             updateCountdown()
             return
         }
-        let newPhase = computePhase()
+        let newPhase = computePhase(config: config, at: Date())
         if newPhase != currentPhase {
             let oldPhase = currentPhase
             currentPhase = newPhase
@@ -114,67 +103,17 @@ class PhaseManager {
         updateCountdown()
     }
 
-    /// Resolved timeline dates for the current cycle, anchored to the most recent morning reset.
-    private struct Timeline {
-        let morning: Date
-        let amber: Date
-        let winddown: Date
-        let lightsOut: Date
-        let nextMorning: Date
+    private var timelineConfig: TimelineConfig {
+        TimelineConfig(
+            morningResetTime: config.morningResetTime,
+            amberTime: config.amberTime,
+            winddownTime: config.winddownTime,
+            lightsOutTime: config.lightsOutTime
+        )
     }
 
-    private func resolveTimeline(for now: Date) -> Timeline? {
-        let calendar = Calendar.current
-        let todayComponents = calendar.dateComponents([.year, .month, .day], from: now)
-
-        guard let morningBase = makeDate(todayComponents, time: config.morningResetTime),
-              let amberBase = makeDate(todayComponents, time: config.amberTime),
-              let winddownBase = makeDate(todayComponents, time: config.winddownTime),
-              let lightsOutBase = makeDate(todayComponents, time: config.lightsOutTime)
-        else {
-            return nil
-        }
-
-        // Anchor to the most recent morning reset
-        let morning: Date
-        if now >= morningBase {
-            morning = morningBase
-        } else {
-            morning = calendar.date(byAdding: .day, value: -1, to: morningBase)!
-        }
-
-        // Each subsequent time: if it's not after the previous one, push it forward a day
-        let amber = amberBase >= morning ? amberBase : calendar.date(byAdding: .day, value: 1, to: amberBase)!
-        let winddown = winddownBase >= amber ? winddownBase : calendar.date(byAdding: .day, value: 1, to: winddownBase)!
-        let lightsOut = lightsOutBase >= winddown ? lightsOutBase : calendar.date(byAdding: .day, value: 1, to: lightsOutBase)!
-        let nextMorning = calendar.date(byAdding: .day, value: 1, to: morning)!
-
-        return Timeline(morning: morning, amber: amber, winddown: winddown, lightsOut: lightsOut, nextMorning: nextMorning)
-    }
-
-    private func computePhase() -> Phase {
-        let now = Date()
-        guard let t = resolveTimeline(for: now) else { return .idle }
-
-        if now >= t.lightsOut && now < t.nextMorning {
-            return .lightsOut
-        }
-        if now >= t.winddown && now < t.lightsOut {
-            return .windDown
-        }
-        if now >= t.amber && now < t.winddown {
-            return .amber
-        }
-        return .idle
-    }
-
-    private func makeDate(_ dayComponents: DateComponents, time: String) -> Date? {
-        guard let (hour, minute) = config.parseTime(time) else { return nil }
-        var components = dayComponents
-        components.hour = hour
-        components.minute = minute
-        components.second = 0
-        return Calendar.current.date(from: components)
+    private func computePhase(config: LightsOutConfig, at now: Date) -> Phase {
+        LightsOutCore.computePhase(config: timelineConfig, at: now)
     }
 
     private func updateCountdown() {
@@ -191,12 +130,11 @@ class PhaseManager {
         }
 
         let now = Date()
-        guard let t = resolveTimeline(for: now) else {
+        guard let t = resolveTimeline(config: timelineConfig, for: now) else {
             delegate?.countdownDidUpdate("Lights Out")
             return
         }
 
-        // Find the next real phase (skip any with 0-duration)
         let text: String
         switch currentPhase {
         case .idle:
@@ -214,14 +152,12 @@ class PhaseManager {
         delegate?.countdownDidUpdate(text)
     }
 
-    /// From idle, find the first non-skipped phase.
     private func nextPhaseAfterIdle(_ t: Timeline) -> (String, Date) {
         if t.amber != t.winddown { return ("Amber", t.amber) }
         if t.winddown != t.lightsOut { return ("Wind-down", t.winddown) }
         return ("Lights out", t.lightsOut)
     }
 
-    /// From amber, find the next non-skipped phase.
     private func nextPhaseAfterAmber(_ t: Timeline) -> (String, Date) {
         if t.winddown != t.lightsOut { return ("Wind-down", t.winddown) }
         return ("Lights out", t.lightsOut)

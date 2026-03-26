@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import LightsOutCore
 
 class AppMonitor {
     private var blockedApps: Set<String>
