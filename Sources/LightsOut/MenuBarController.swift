@@ -1,0 +1,205 @@
+import AppKit
+import SwiftUI
+
+class MenuBarController {
+    private let statusItem: NSStatusItem
+    private let phaseManager: PhaseManager
+    private let checklistManager: ChecklistManager
+    private var checklistMenuItems: [NSMenuItem] = []
+
+    init(phaseManager: PhaseManager, checklistManager: ChecklistManager) {
+        self.phaseManager = phaseManager
+        self.checklistManager = checklistManager
+        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+
+        setupMenu()
+        updatePhase(.idle)
+    }
+
+    func updatePhase(_ phase: Phase) {
+        guard let button = statusItem.button else { return }
+        switch phase {
+        case .idle:
+            button.image = NSImage(systemSymbolName: "moon.fill", accessibilityDescription: "Lights Out")
+        case .amber:
+            button.image = NSImage(systemSymbolName: "moon.haze.fill", accessibilityDescription: "Amber")
+        case .windDown:
+            button.image = NSImage(systemSymbolName: "moon.dust.fill", accessibilityDescription: "Wind Down")
+        case .lightsOut:
+            button.image = NSImage(systemSymbolName: "moon.zzz.fill", accessibilityDescription: "Lights Out")
+        }
+
+        // Disable config/quit when not idle (unless in dev mode)
+        let allowControls = phase == .idle || phaseManager.devMode
+        if let menu = statusItem.menu {
+            menu.items.first(where: { $0.tag == 400 })?.isEnabled = allowControls
+            menu.items.first(where: { $0.tag == 401 })?.isEnabled = allowControls
+        }
+    }
+
+    func updateCountdown(_ text: String) {
+        statusItem.button?.title = " \(text)"
+    }
+
+    func refreshChecklist() {
+        let items = checklistManager.items
+        // Remove old checklist items
+        for item in checklistMenuItems {
+            statusItem.menu?.removeItem(item)
+        }
+        checklistMenuItems.removeAll()
+
+        guard let menu = statusItem.menu,
+              let separatorIndex = menu.items.firstIndex(where: { $0.tag == 100 })
+        else { return }
+
+        // Insert checklist items after the separator with tag 100
+        for (index, checkItem) in items.enumerated() {
+            let menuItem = NSMenuItem(
+                title: checkItem.title,
+                action: #selector(toggleChecklistItem(_:)),
+                keyEquivalent: ""
+            )
+            menuItem.target = self
+            menuItem.tag = 200 + index
+            menuItem.state = checkItem.completed ? .on : .off
+            menu.insertItem(menuItem, at: separatorIndex + 1 + index)
+            checklistMenuItems.append(menuItem)
+        }
+    }
+
+    private func setupMenu() {
+        let menu = NSMenu()
+
+        let phaseItem = NSMenuItem(title: "Phase: Idle", action: nil, keyEquivalent: "")
+        phaseItem.tag = 50
+        phaseItem.isEnabled = false
+        menu.addItem(phaseItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let checklistHeader = NSMenuItem(title: "Checklist", action: nil, keyEquivalent: "")
+        checklistHeader.isEnabled = false
+        menu.addItem(checklistHeader)
+
+        let checklistSep = NSMenuItem.separator()
+        checklistSep.tag = 100
+        menu.addItem(checklistSep)
+
+        // Checklist items will be inserted here by refreshChecklist()
+
+        menu.addItem(NSMenuItem.separator())
+
+        #if DEV_MODE
+        // Dev Mode submenu
+        let devMenu = NSMenu(title: "Dev Mode")
+
+        let devToggle = NSMenuItem(title: "Enable Dev Mode", action: #selector(toggleDevMode(_:)), keyEquivalent: "d")
+        devToggle.target = self
+        devToggle.tag = 300
+        devMenu.addItem(devToggle)
+
+        devMenu.addItem(NSMenuItem.separator())
+
+        let phases: [(String, Phase, String)] = [
+            ("Idle", .idle, "1"),
+            ("Amber", .amber, "2"),
+            ("Wind-Down", .windDown, "3"),
+            ("Lights Out", .lightsOut, "4"),
+        ]
+        for (index, (title, _, key)) in phases.enumerated() {
+            let item = NSMenuItem(title: "→ \(title)", action: #selector(devForcePhase(_:)), keyEquivalent: key)
+            item.target = self
+            item.tag = 310 + index
+            item.isEnabled = false
+            devMenu.addItem(item)
+        }
+
+        devMenu.addItem(NSMenuItem.separator())
+
+        let cycleItem = NSMenuItem(title: "Auto-Cycle (15s/phase)", action: #selector(devToggleCycle(_:)), keyEquivalent: "5")
+        cycleItem.target = self
+        cycleItem.tag = 320
+        cycleItem.isEnabled = false
+        devMenu.addItem(cycleItem)
+
+        let devMenuItem = NSMenuItem(title: "Dev Mode", action: nil, keyEquivalent: "")
+        devMenuItem.submenu = devMenu
+        menu.addItem(devMenuItem)
+
+        menu.addItem(NSMenuItem.separator())
+        #endif
+
+        let settingsItem = NSMenuItem(
+            title: "Open Config...",
+            action: #selector(openConfig),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        settingsItem.tag = 400
+        menu.addItem(settingsItem)
+
+        let quitItem = NSMenuItem(
+            title: "Quit Lights Out",
+            action: #selector(quitApp),
+            keyEquivalent: "q"
+        )
+        quitItem.target = self
+        quitItem.tag = 401
+        menu.addItem(quitItem)
+
+        statusItem.menu = menu
+        refreshChecklist()
+    }
+
+    #if DEV_MODE
+    private static let devPhases: [Phase] = [.idle, .amber, .windDown, .lightsOut]
+
+    @objc private func toggleDevMode(_ sender: NSMenuItem) {
+        let enabling = !phaseManager.devMode
+        phaseManager.setDevMode(enabling)
+        sender.title = enabling ? "✓ Dev Mode On" : "Enable Dev Mode"
+
+        // Enable/disable phase buttons and cycle
+        guard let devMenu = sender.menu else { return }
+        for item in devMenu.items {
+            if item.tag >= 310 && item.tag <= 320 {
+                item.isEnabled = enabling
+            }
+        }
+        if !enabling {
+            // Reset cycle menu title
+            if let cycleItem = devMenu.items.first(where: { $0.tag == 320 }) {
+                cycleItem.title = "Auto-Cycle (15s/phase)"
+            }
+        }
+    }
+
+    @objc private func devForcePhase(_ sender: NSMenuItem) {
+        let index = sender.tag - 310
+        guard index >= 0 && index < Self.devPhases.count else { return }
+        phaseManager.forcePhase(Self.devPhases[index])
+    }
+
+    @objc private func devToggleCycle(_ sender: NSMenuItem) {
+        phaseManager.toggleDevCycle()
+        sender.title = phaseManager.isDevCycling
+            ? "■ Stop Auto-Cycle"
+            : "Auto-Cycle (15s/phase)"
+    }
+    #endif
+
+    @objc private func toggleChecklistItem(_ sender: NSMenuItem) {
+        let index = sender.tag - 200
+        checklistManager.toggle(at: index)
+        sender.state = checklistManager.items[index].completed ? .on : .off
+    }
+
+    @objc private func openConfig() {
+        NSWorkspace.shared.open(Constants.configFile)
+    }
+
+    @objc private func quitApp() {
+        NSApplication.shared.terminate(nil)
+    }
+}

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "LightsOut (Debug)",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["scripts/debug-run.sh"],
+      "port": null
+    },
+    {
+      "name": "LightsOut (Release Bundle)",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["scripts/bundle.sh"],
+      "port": null
+    }
+  ]
+}
