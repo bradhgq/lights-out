@@ -187,7 +187,11 @@ extension AppDelegate: PhaseManagerDelegate {
     }
 
     func countdownDidUpdate(_ text: String) {
-        menuBarController.updateCountdown(text)
+        if let overrideSummary = appMonitor.activeOverrideSummary() {
+            menuBarController.updateCountdown("\(text) | \(overrideSummary)")
+        } else {
+            menuBarController.updateCountdown(text)
+        }
     }
 
     func morningResetTriggered() {

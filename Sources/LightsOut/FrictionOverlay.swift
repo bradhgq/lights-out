@@ -13,20 +13,21 @@ class FrictionOverlayController {
 
     var isShowing: Bool { window != nil }
 
-    func show(delay: Int, appName: String, onComplete: @escaping (Bool) -> Void) {
+    /// Show the wind-down friction overlay. `onComplete` receives the chosen duration in minutes, or nil if cancelled.
+    func show(delay: Int, appName: String, onComplete: @escaping (Int?) -> Void) {
         guard window == nil else { return }
-        currentCompletion = onComplete
 
         let overlayView = FrictionOverlayView(
             delaySeconds: delay,
             appName: appName,
-            onAllow: { [weak self] in
+            durationChoices: Constants.overrideDurationChoices,
+            onAllow: { [weak self] minutes in
                 self?.dismiss()
-                onComplete(true)
+                onComplete(minutes)
             },
             onCancel: { [weak self] in
                 self?.dismiss()
-                onComplete(false)
+                onComplete(nil)
             }
         )
 
@@ -126,20 +127,26 @@ class FrictionOverlayController {
 struct FrictionOverlayView: View {
     let delaySeconds: Int
     let appName: String
-    let onAllow: () -> Void
+    let durationChoices: [Int] // minutes
+    let onAllow: (Int) -> Void // passes chosen duration in minutes
     let onCancel: () -> Void
 
     @State private var remainingSeconds: Int
     @State private var typedPhrase: String = ""
-    @State private var timerActive = true
+    @State private var challengePhrase: String = Constants.randomWindDownPhrase()
     @FocusState private var textFieldFocused: Bool
 
-    init(delaySeconds: Int, appName: String, onAllow: @escaping () -> Void, onCancel: @escaping () -> Void) {
+    init(delaySeconds: Int, appName: String, durationChoices: [Int], onAllow: @escaping (Int) -> Void, onCancel: @escaping () -> Void) {
         self.delaySeconds = delaySeconds
         self.appName = appName
+        self.durationChoices = durationChoices
         self.onAllow = onAllow
         self.onCancel = onCancel
         self._remainingSeconds = State(initialValue: delaySeconds)
+    }
+
+    private var phraseMatches: Bool {
+        typedPhrase.trimmingCharacters(in: .whitespaces) == challengePhrase
     }
 
     var body: some View {
@@ -168,28 +175,39 @@ struct FrictionOverlayView: View {
                     Text("Wait for the timer to finish")
                         .foregroundColor(.white.opacity(0.5))
                 } else {
-                    Text("Type the phrase below to continue:")
+                    Text("Type the phrase below exactly:")
                         .font(.title3)
                         .foregroundColor(.white.opacity(0.8))
 
-                    Text("\"\(Constants.overridePhrase)\"")
-                        .font(.title3)
+                    Text("\"\(challengePhrase)\"")
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundColor(.orange)
                         .italic()
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
 
                     TextField("Type here...", text: $typedPhrase)
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 400)
+                        .frame(maxWidth: 500)
                         .font(.title3)
                         .focused($textFieldFocused)
                         .onAppear { textFieldFocused = true }
 
-                    Button("Override") {
-                        onAllow()
+                    if phraseMatches {
+                        Text("How long do you need?")
+                            .font(.title3)
+                            .foregroundColor(.white.opacity(0.8))
+
+                        HStack(spacing: 16) {
+                            ForEach(durationChoices, id: \.self) { minutes in
+                                Button("\(minutes) minutes") {
+                                    onAllow(minutes)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.orange)
+                            }
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-                    .disabled(typedPhrase.trimmingCharacters(in: .whitespaces) != Constants.overridePhrase)
                 }
 
                 Button("Cancel — Go to bed") {
@@ -231,12 +249,13 @@ struct BlockedOverlayView: View {
     @State private var showEmergency = false
     @State private var typedPhrase: String = ""
     @State private var typedRandom: String = ""
+    @State private var challengePhrase: String = Constants.randomEmergencyPhrase()
     @State private var randomChallenge: String = Constants.generateRandomChallenge(length: 20)
     @FocusState private var phraseFieldFocused: Bool
     @FocusState private var randomFieldFocused: Bool
 
     private var phraseMatches: Bool {
-        typedPhrase.trimmingCharacters(in: .whitespaces) == Constants.emergencyPhrase
+        typedPhrase.trimmingCharacters(in: .whitespaces) == challengePhrase
     }
     private var randomMatches: Bool {
         typedRandom == randomChallenge
@@ -282,10 +301,12 @@ struct BlockedOverlayView: View {
                         Text("Type the phrase exactly:")
                             .foregroundColor(.white.opacity(0.7))
 
-                        Text("\"\(Constants.emergencyPhrase)\"")
+                        Text("\"\(challengePhrase)\"")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.red.opacity(0.8))
                             .italic()
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
 
                         TextField("Type phrase here...", text: $typedPhrase)
                             .textFieldStyle(.roundedBorder)
