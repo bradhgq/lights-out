@@ -29,7 +29,7 @@ let package = Package(
             name: "LightsOutHelper",
             path: "Sources/LightsOutHelper"
         ),
-        .executableTarget(
+        .testTarget(
             name: "LightsOutTests",
             dependencies: ["LightsOutCore"],
             path: "Tests/LightsOutTests"
