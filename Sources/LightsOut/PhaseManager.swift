@@ -23,10 +23,6 @@ class PhaseManager {
     // Dev mode
     private(set) var devMode = false
     private var devOverride: Phase?
-    private var devCycling = false
-    private var devCycleTimer: Timer?
-    private var devCycleSecondsRemaining = 0
-    private let devCycleDuration = 15 // seconds per phase when auto-cycling
 
     init(config: LightsOutConfig) {
         self.config = config
@@ -66,16 +62,17 @@ class PhaseManager {
     func stop() {
         timer?.invalidate()
         timer = nil
-        stopDevCycle()
+
     }
 
     // MARK: - Dev Mode
 
     func setDevMode(_ enabled: Bool) {
         devMode = enabled
+        Constants.devMode = enabled
         if !enabled {
             devOverride = nil
-            stopDevCycle()
+    
             // Re-evaluate real phase
             let newPhase = computePhase()
             if newPhase != currentPhase {
@@ -88,7 +85,7 @@ class PhaseManager {
 
     func forcePhase(_ phase: Phase) {
         guard devMode else { return }
-        stopDevCycle()
+
         devOverride = phase
         let oldPhase = currentPhase
         currentPhase = phase
@@ -97,68 +94,6 @@ class PhaseManager {
             delegate?.morningResetTriggered()
         }
         updateCountdown()
-    }
-
-    func toggleDevCycle() {
-        guard devMode else { return }
-        if devCycling {
-            stopDevCycle()
-        } else {
-            startDevCycle()
-        }
-        updateCountdown()
-    }
-
-    var isDevCycling: Bool { devCycling }
-
-    private func startDevCycle() {
-        devCycling = true
-        devCycleSecondsRemaining = devCycleDuration
-        devOverride = .idle
-        let oldPhase = currentPhase
-        currentPhase = .idle
-        delegate?.phaseDidChange(to: .idle)
-        if oldPhase == .lightsOut {
-            delegate?.morningResetTriggered()
-        }
-
-        devCycleTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.devCycleTick()
-        }
-        if let t = devCycleTimer {
-            RunLoop.main.add(t, forMode: .common)
-        }
-    }
-
-    private func stopDevCycle() {
-        devCycling = false
-        devCycleTimer?.invalidate()
-        devCycleTimer = nil
-    }
-
-    private func devCycleTick() {
-        devCycleSecondsRemaining -= 1
-        if devCycleSecondsRemaining <= 0 {
-            advanceDevPhase()
-            devCycleSecondsRemaining = devCycleDuration
-        }
-        updateCountdown()
-    }
-
-    private static let phaseOrder: [Phase] = [.idle, .amber, .windDown, .lightsOut]
-
-    private func advanceDevPhase() {
-        guard let current = devOverride,
-              let idx = Self.phaseOrder.firstIndex(of: current) else { return }
-        let nextIdx = (idx + 1) % Self.phaseOrder.count
-        let nextPhase = Self.phaseOrder[nextIdx]
-        devOverride = nextPhase
-        let oldPhase = currentPhase
-        currentPhase = nextPhase
-        delegate?.phaseDidChange(to: nextPhase)
-        if oldPhase == .lightsOut && nextPhase == .idle {
-            delegate?.morningResetTriggered()
-        }
     }
 
     private func tick() {
@@ -251,11 +186,7 @@ class PhaseManager {
             case .windDown: phaseName = "Wind-Down"
             case .lightsOut: phaseName = "Lights Out"
             }
-            if devCycling {
-                delegate?.countdownDidUpdate("[DEV] \(phaseName) \(devCycleSecondsRemaining)s")
-            } else {
-                delegate?.countdownDidUpdate("[DEV] \(phaseName)")
-            }
+            delegate?.countdownDidUpdate("[DEV] \(phaseName)")
             return
         }
 

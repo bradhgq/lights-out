@@ -115,14 +115,6 @@ class MenuBarController {
             devMenu.addItem(item)
         }
 
-        devMenu.addItem(NSMenuItem.separator())
-
-        let cycleItem = NSMenuItem(title: "Auto-Cycle (15s/phase)", action: #selector(devToggleCycle(_:)), keyEquivalent: "5")
-        cycleItem.target = self
-        cycleItem.tag = 320
-        cycleItem.isEnabled = false
-        devMenu.addItem(cycleItem)
-
         let devMenuItem = NSMenuItem(title: "Dev Mode", action: nil, keyEquivalent: "")
         devMenuItem.submenu = devMenu
         menu.addItem(devMenuItem)
@@ -160,17 +152,11 @@ class MenuBarController {
         phaseManager.setDevMode(enabling)
         sender.title = enabling ? "✓ Dev Mode On" : "Enable Dev Mode"
 
-        // Enable/disable phase buttons and cycle
+        // Enable/disable phase buttons
         guard let devMenu = sender.menu else { return }
         for item in devMenu.items {
-            if item.tag >= 310 && item.tag <= 320 {
+            if item.tag >= 310 && item.tag <= 313 {
                 item.isEnabled = enabling
-            }
-        }
-        if !enabling {
-            // Reset cycle menu title
-            if let cycleItem = devMenu.items.first(where: { $0.tag == 320 }) {
-                cycleItem.title = "Auto-Cycle (15s/phase)"
             }
         }
     }
@@ -181,12 +167,6 @@ class MenuBarController {
         phaseManager.forcePhase(Self.devPhases[index])
     }
 
-    @objc private func devToggleCycle(_ sender: NSMenuItem) {
-        phaseManager.toggleDevCycle()
-        sender.title = phaseManager.isDevCycling
-            ? "■ Stop Auto-Cycle"
-            : "Auto-Cycle (15s/phase)"
-    }
     #endif
 
     @objc private func toggleChecklistItem(_ sender: NSMenuItem) {

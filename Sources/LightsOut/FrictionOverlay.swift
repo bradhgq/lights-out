@@ -9,7 +9,6 @@ private class KeyableWindow: NSWindow {
 
 class FrictionOverlayController {
     private var window: NSWindow?
-    private var currentCompletion: ((Bool) -> Void)?
 
     var isShowing: Bool { window != nil }
 
@@ -85,40 +84,9 @@ class FrictionOverlayController {
         self.window = win
     }
 
-    func showQuitChallenge(onAllow: @escaping () -> Void) {
-        guard window == nil else { return }
-
-        let view = QuitChallengeView(
-            onAllow: { [weak self] in
-                self?.dismiss()
-                onAllow()
-            },
-            onCancel: { [weak self] in
-                self?.dismiss()
-            }
-        )
-
-        guard let screen = NSScreen.main else { return }
-        let win = KeyableWindow(
-            contentRect: screen.frame,
-            styleMask: .borderless,
-            backing: .buffered,
-            defer: false
-        )
-        win.level = .init(Int(CGShieldingWindowLevel()))
-        win.isOpaque = false
-        win.backgroundColor = .clear
-        win.contentView = NSHostingView(rootView: view)
-        win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        win.makeKeyAndOrderFront(nil)
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        self.window = win
-    }
-
     func dismiss() {
         window?.orderOut(nil)
         window = nil
-        currentCompletion = nil
     }
 }
 
@@ -347,91 +315,6 @@ struct BlockedOverlayView: View {
                         }
                     }
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
-}
-
-struct QuitChallengeView: View {
-    let onAllow: () -> Void
-    let onCancel: () -> Void
-
-    @State private var typedPhrase: String = ""
-    @State private var typedRandom: String = ""
-    @State private var randomChallenge: String = Constants.generateRandomChallenge(length: 16)
-    @FocusState private var phraseFieldFocused: Bool
-    @FocusState private var randomFieldFocused: Bool
-
-    private static let quitPhrase = "I am quitting Lights Out and I accept the consequences"
-
-    private var phraseMatches: Bool {
-        typedPhrase.trimmingCharacters(in: .whitespaces) == Self.quitPhrase
-    }
-    private var randomMatches: Bool {
-        typedRandom == randomChallenge
-    }
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.9)
-                .ignoresSafeArea()
-
-            VStack(spacing: 24) {
-                Text("Are you sure you want to quit?")
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundColor(.red)
-
-                Text("Quitting will remove all wind-down protections.")
-                    .font(.title3)
-                    .foregroundColor(.white.opacity(0.7))
-
-                Text("Type the phrase exactly:")
-                    .foregroundColor(.white.opacity(0.7))
-                    .padding(.top, 10)
-
-                Text("\"\(Self.quitPhrase)\"")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.red.opacity(0.8))
-                    .italic()
-
-                TextField("Type phrase here...", text: $typedPhrase)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 500)
-                    .focused($phraseFieldFocused)
-                    .onAppear { phraseFieldFocused = true }
-
-                if phraseMatches {
-                    Text("Now type this random string:")
-                        .foregroundColor(.white.opacity(0.7))
-
-                    Text(randomChallenge)
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        .foregroundColor(.orange)
-
-                    TextField("Type random string here...", text: $typedRandom)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 500)
-                        .font(.system(.body, design: .monospaced))
-                        .focused($randomFieldFocused)
-                        .onAppear { randomFieldFocused = true }
-                }
-
-                HStack(spacing: 20) {
-                    Button("Cancel — Stay protected") {
-                        onCancel()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-
-                    Button("Quit Lights Out") {
-                        onAllow()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                    .disabled(!phraseMatches || !randomMatches)
-                }
-                .padding(.top, 10)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

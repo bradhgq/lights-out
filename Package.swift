@@ -10,6 +10,7 @@ let package = Package(
             path: "Sources/LightsOut",
             swiftSettings: [
                 .define("DEV_MODE", .when(configuration: .debug)),
+                .unsafeFlags(["-warnings-as-errors"]),
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),

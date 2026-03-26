@@ -38,16 +38,29 @@ enum Constants {
         "If I am being honest with myself this is probably not actually an emergency",
     ]
 
+    #if DEV_MODE
+    static var devMode = false
+    #endif
+
     static func randomWindDownPhrase() -> String {
-        windDownPhrases.randomElement()!
+        #if DEV_MODE
+        if devMode { return "I want to stay up" }
+        #endif
+        return windDownPhrases.randomElement()!
     }
 
     static func randomEmergencyPhrase() -> String {
-        emergencyPhrases.randomElement()!
+        #if DEV_MODE
+        if devMode { return "This is an emergency" }
+        #endif
+        return emergencyPhrases.randomElement()!
     }
 
     /// Generate a random string of mixed-case letters and digits that's hard to type.
     static func generateRandomChallenge(length: Int = 20) -> String {
+        #if DEV_MODE
+        if devMode { return "abc123" }
+        #endif
         let chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         return String((0..<length).map { _ in chars.randomElement()! })
     }
