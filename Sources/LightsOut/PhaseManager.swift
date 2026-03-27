@@ -61,7 +61,9 @@ class PhaseManager {
 
     func setDevMode(_ enabled: Bool) {
         devMode = enabled
+        #if DEV_MODE
         Constants.devMode = enabled
+        #endif
         if !enabled {
             devOverride = nil
             let newPhase = computePhase(config: config, at: Date())
