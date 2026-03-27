@@ -3,28 +3,29 @@ import Foundation
 import LightsOutCore
 
 class AppMonitor {
-    /// Lowercased blocked app names for case-insensitive matching
-    private var blockedApps: Set<String>
+    /// Blocked app bundle identifiers
+    private var blockedBundleIDs: Set<String>
     private var frictionDelays: [Int]
     private let frictionOverlay: FrictionOverlayController
     private let overrideLogger: OverrideLogger
 
+    /// Keyed by bundle ID
     private var overrideCounts: [String: Int] = [:]
     private var currentPhase: Phase = .idle
     private var isMonitoring = false
     private var pollingTimer: Timer?
-    private var temporarilyAllowed: Set<String> = []
-    private var overrideTimers: [String: Timer] = [:]
-    private(set) var overrideExpiries: [String: Date] = [:]
-    private var hiddenApps: [String: NSRunningApplication] = [:]
+    private var temporarilyAllowed: Set<String> = []  // bundle IDs
+    private var overrideTimers: [String: Timer] = [:]  // bundle ID → timer
+    private(set) var overrideExpiries: [String: Date] = [:]  // bundle ID → expiry
+    private var hiddenApps: [String: NSRunningApplication] = [:]  // bundle ID → app
 
     init(
-        blockedApps: [String],
+        blockedBundleIDs: [String],
         frictionDelays: [Int],
         frictionOverlay: FrictionOverlayController,
         overrideLogger: OverrideLogger
     ) {
-        self.blockedApps = Set(blockedApps.map { $0.lowercased() })
+        self.blockedBundleIDs = Set(blockedBundleIDs)
         self.frictionDelays = frictionDelays
         self.frictionOverlay = frictionOverlay
         self.overrideLogger = overrideLogger
@@ -66,31 +67,32 @@ class AppMonitor {
         temporarilyAllowed.removeAll()
     }
 
-    private func isBlocked(_ name: String) -> Bool {
-        blockedApps.contains(name.lowercased())
+    private func isBlocked(_ bundleID: String) -> Bool {
+        blockedBundleIDs.contains(bundleID)
     }
 
     func hideBlockedApps() {
         let running = NSWorkspace.shared.runningApplications
         for app in running {
-            guard let name = app.localizedName, isBlocked(name) else { continue }
-            if temporarilyAllowed.contains(name) { continue }
+            guard let bundleID = app.bundleIdentifier, isBlocked(bundleID) else { continue }
+            if temporarilyAllowed.contains(bundleID) { continue }
             app.hide()
-            hiddenApps[name] = app
+            hiddenApps[bundleID] = app
         }
     }
 
     func unhideAll() {
-        for (name, app) in hiddenApps {
+        for (bundleID, app) in hiddenApps {
             if app.isTerminated { continue }
             app.unhide()
-            print("[LightsOut] Unhid \(name)")
+            let displayName = app.localizedName ?? bundleID
+            print("[LightsOut] Unhid \(displayName)")
         }
         hiddenApps.removeAll()
     }
 
-    func updateConfig(blockedApps: [String], frictionDelays: [Int]) {
-        self.blockedApps = Set(blockedApps.map { $0.lowercased() })
+    func updateConfig(blockedBundleIDs: [String], frictionDelays: [Int]) {
+        self.blockedBundleIDs = Set(blockedBundleIDs)
         self.frictionDelays = frictionDelays
     }
 
@@ -100,8 +102,12 @@ class AppMonitor {
         let remaining = max(0, Int(soonest.value.timeIntervalSinceNow))
         let m = remaining / 60
         let s = remaining % 60
+        // Show display name if possible
+        let displayName = hiddenApps[soonest.key]?.localizedName
+            ?? NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == soonest.key })?.localizedName
+            ?? soonest.key
         if overrideExpiries.count == 1 {
-            return "\(soonest.key) \(m):\(String(format: "%02d", s))"
+            return "\(displayName) \(m):\(String(format: "%02d", s))"
         }
         return "\(overrideExpiries.count) overrides \(m):\(String(format: "%02d", s))"
     }
@@ -118,92 +124,93 @@ class AppMonitor {
 
     @objc private func appDidLaunch(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-              let name = app.localizedName,
-              isBlocked(name),
-              !temporarilyAllowed.contains(name)
+              let bundleID = app.bundleIdentifier,
+              isBlocked(bundleID),
+              !temporarilyAllowed.contains(bundleID)
         else { return }
-        handleBlockedApp(name: name, app: app)
+        handleBlockedApp(bundleID: bundleID, app: app)
     }
 
     private func scanRunningApps() {
         let running = NSWorkspace.shared.runningApplications
         for app in running {
-            guard let name = app.localizedName, isBlocked(name) else { continue }
-            if temporarilyAllowed.contains(name) { continue }
+            guard let bundleID = app.bundleIdentifier, isBlocked(bundleID) else { continue }
+            if temporarilyAllowed.contains(bundleID) { continue }
             if app.isHidden { continue }
-            handleBlockedApp(name: name, app: app)
+            handleBlockedApp(bundleID: bundleID, app: app)
         }
     }
 
-    private func handleBlockedApp(name: String, app: NSRunningApplication) {
-        guard isBlocked(name), !temporarilyAllowed.contains(name) else { return }
+    private func handleBlockedApp(bundleID: String, app: NSRunningApplication) {
+        guard isBlocked(bundleID), !temporarilyAllowed.contains(bundleID) else { return }
+        let displayName = app.localizedName ?? bundleID
 
         if currentPhase == .lightsOut {
             // Hide and show blocked overlay with emergency valve
             app.hide()
-            hiddenApps[name] = app
-            overrideLogger.log(appName: name, phase: "lightsOut", frictionDelay: 0)
-            frictionOverlay.showBlocked(appName: name) { [weak self] in
+            hiddenApps[bundleID] = app
+            overrideLogger.log(appName: displayName, phase: "lightsOut", frictionDelay: 0)
+            frictionOverlay.showBlocked(appName: displayName) { [weak self] in
                 guard let self else { return }
-                self.temporarilyAllowed.insert(name)
-                self.overrideLogger.log(appName: name, phase: "lightsOut-emergency", frictionDelay: -2)
+                self.temporarilyAllowed.insert(bundleID)
+                self.overrideLogger.log(appName: displayName, phase: "lightsOut-emergency", frictionDelay: -2)
                 app.unhide()
-                self.hiddenApps.removeValue(forKey: name)
+                self.hiddenApps.removeValue(forKey: bundleID)
 
                 // Emergency overrides are always 5 minutes
                 let expiry = Date().addingTimeInterval(5 * 60)
-                self.overrideExpiries[name] = expiry
-                self.overrideTimers[name]?.invalidate()
-                self.overrideTimers[name] = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: false) { [weak self] _ in
+                self.overrideExpiries[bundleID] = expiry
+                self.overrideTimers[bundleID]?.invalidate()
+                self.overrideTimers[bundleID] = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: false) { [weak self] _ in
                     guard let self else { return }
-                    self.temporarilyAllowed.remove(name)
-                    self.overrideTimers.removeValue(forKey: name)
-                    self.overrideExpiries.removeValue(forKey: name)
-                    print("[LightsOut] Emergency override expired for \(name)")
+                    self.temporarilyAllowed.remove(bundleID)
+                    self.overrideTimers.removeValue(forKey: bundleID)
+                    self.overrideExpiries.removeValue(forKey: bundleID)
+                    print("[LightsOut] Emergency override expired for \(displayName)")
                 }
             }
             return
         }
 
         // Wind-down phase: show friction overlay
-        let count = overrideCounts[name, default: 0]
+        let count = overrideCounts[bundleID, default: 0]
 
         if count >= frictionDelays.count {
             // Exceeded max overrides — hide completely
             app.hide()
-            hiddenApps[name] = app
-            overrideLogger.log(appName: name, phase: "windDown", frictionDelay: -1)
-            frictionOverlay.showBlocked(appName: name)
+            hiddenApps[bundleID] = app
+            overrideLogger.log(appName: displayName, phase: "windDown", frictionDelay: -1)
+            frictionOverlay.showBlocked(appName: displayName)
             return
         }
 
         // Hide the app first, then show friction
         app.hide()
-        hiddenApps[name] = app
+        hiddenApps[bundleID] = app
 
         let delay = frictionDelays[count]
 
         guard !frictionOverlay.isShowing else { return }
 
-        frictionOverlay.show(delay: delay, appName: name) { [weak self] chosenMinutes in
+        frictionOverlay.show(delay: delay, appName: displayName) { [weak self] chosenMinutes in
             guard let self, let minutes = chosenMinutes else { return }
-            self.overrideCounts[name, default: 0] += 1
-            self.temporarilyAllowed.insert(name)
-            self.overrideLogger.log(appName: name, phase: "windDown", frictionDelay: delay)
+            self.overrideCounts[bundleID, default: 0] += 1
+            self.temporarilyAllowed.insert(bundleID)
+            self.overrideLogger.log(appName: displayName, phase: "windDown", frictionDelay: delay)
             // Unhide the app for the user
             app.unhide()
-            self.hiddenApps.removeValue(forKey: name)
+            self.hiddenApps.removeValue(forKey: bundleID)
 
             // Schedule revocation after the chosen duration
             let expiry = Date().addingTimeInterval(TimeInterval(minutes * 60))
-            self.overrideExpiries[name] = expiry
-            self.overrideTimers[name]?.invalidate()
-            self.overrideTimers[name] = Timer.scheduledTimer(withTimeInterval: TimeInterval(minutes * 60), repeats: false) { [weak self] _ in
+            self.overrideExpiries[bundleID] = expiry
+            self.overrideTimers[bundleID]?.invalidate()
+            self.overrideTimers[bundleID] = Timer.scheduledTimer(withTimeInterval: TimeInterval(minutes * 60), repeats: false) { [weak self] _ in
                 guard let self else { return }
-                self.temporarilyAllowed.remove(name)
-                self.overrideTimers.removeValue(forKey: name)
-                self.overrideExpiries.removeValue(forKey: name)
-                print("[LightsOut] Override expired for \(name) after \(minutes) min")
+                self.temporarilyAllowed.remove(bundleID)
+                self.overrideTimers.removeValue(forKey: bundleID)
+                self.overrideExpiries.removeValue(forKey: bundleID)
+                print("[LightsOut] Override expired for \(displayName) after \(minutes) min")
             }
         }
     }

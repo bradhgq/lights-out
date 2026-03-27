@@ -8,6 +8,7 @@ class MenuBarController: NSObject, NSMenuItemValidation {
     private let checklistManager: ChecklistManager
     private var checklistMenuItems: [NSMenuItem] = []
     var showCountdownInMenuBar = true
+    var onOpenSettings: (() -> Void)?
 
     init(phaseManager: PhaseManager, checklistManager: ChecklistManager) {
         self.phaseManager = phaseManager
@@ -144,8 +145,8 @@ class MenuBarController: NSObject, NSMenuItemValidation {
         #endif
 
         let settingsItem = NSMenuItem(
-            title: "Open Config...",
-            action: #selector(openConfig),
+            title: "Settings...",
+            action: #selector(openSettings),
             keyEquivalent: ","
         )
         settingsItem.target = self
@@ -196,8 +197,8 @@ class MenuBarController: NSObject, NSMenuItemValidation {
         sender.state = checklistManager.items[index].completed ? .on : .off
     }
 
-    @objc private func openConfig() {
-        NSWorkspace.shared.open(Constants.configFile)
+    @objc private func openSettings() {
+        onOpenSettings?()
     }
 
     @objc private func quitApp() {

@@ -14,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var shortcutTrigger: ShortcutTrigger!
     private var frictionOverlay: FrictionOverlayController!
     private var checklistWindow: ChecklistWindowController!
+    private var settingsWindow: SettingsWindowController!
 
     private var previousPhase: Phase = .idle
 
@@ -46,7 +47,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         frictionOverlay = FrictionOverlayController()
 
         appMonitor = AppMonitor(
-            blockedApps: config.blockedApps,
+            blockedBundleIDs: config.effectiveBlockedBundleIDs(scanner: configManager.scanner),
             frictionDelays: config.frictionDelaysSeconds,
             frictionOverlay: frictionOverlay,
             overrideLogger: overrideLogger
@@ -60,11 +61,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         phaseManager = PhaseManager(config: config)
         phaseManager.delegate = self
 
+        settingsWindow = SettingsWindowController(configManager: configManager)
+        settingsWindow.onConfigChanged = { [weak self] in
+            self?.handleConfigReload()
+        }
+
         menuBarController = MenuBarController(
             phaseManager: phaseManager,
             checklistManager: checklistManager
         )
         menuBarController.showCountdownInMenuBar = config.showCountdownInMenuBar
+        menuBarController.onOpenSettings = { [weak self] in
+            self?.settingsWindow.show()
+        }
 
         // Swallow Cmd+Q when not idle
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -236,7 +245,7 @@ extension AppDelegate: PhaseManagerDelegate {
         let config = configManager.config
         phaseManager.updateConfig(config)
         appMonitor.updateConfig(
-            blockedApps: config.blockedApps,
+            blockedBundleIDs: config.effectiveBlockedBundleIDs(scanner: configManager.scanner),
             frictionDelays: config.frictionDelaysSeconds
         )
         checklistManager.reset(items: config.checklist)

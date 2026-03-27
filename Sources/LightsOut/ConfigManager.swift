@@ -5,9 +5,11 @@ struct LightsOutConfig: Codable {
     var winddownTime: String
     var lightsOutTime: String
     var morningResetTime: String
-    var blockedApps: [String]
+    var blockedApps: [String]           // legacy: display names
+    var blockedAppBundleIDs: [String]?  // preferred: bundle identifiers
     var blockedDomains: [String]
-    var whitelistedApps: [String]
+    var whitelistedApps: [String]              // legacy: display names
+    var whitelistedAppBundleIDs: [String]?     // preferred: bundle identifiers
     var checklist: [String]
     var frictionDelaysSeconds: [Int]
     var enableShortcutTrigger: Bool
@@ -20,8 +22,10 @@ struct LightsOutConfig: Codable {
         case lightsOutTime = "lights_out_time"
         case morningResetTime = "morning_reset_time"
         case blockedApps = "blocked_apps"
+        case blockedAppBundleIDs = "blocked_app_bundle_ids"
         case blockedDomains = "blocked_domains"
         case whitelistedApps = "whitelisted_apps"
+        case whitelistedAppBundleIDs = "whitelisted_app_bundle_ids"
         case checklist
         case frictionDelaysSeconds = "friction_delays_seconds"
         case enableShortcutTrigger = "enable_shortcut_trigger"
@@ -34,13 +38,21 @@ struct LightsOutConfig: Codable {
         winddownTime: "23:00",
         lightsOutTime: "23:30",
         morningResetTime: "06:00",
-        blockedApps: ["Google Chrome", "Firefox", "Safari", "Stremio"],
+        blockedApps: [],
+        blockedAppBundleIDs: [
+            "com.google.Chrome", "org.mozilla.firefox", "com.apple.Safari",
+            "com.westbridge.stremio4-mac",
+        ],
         blockedDomains: [
             "youtube.com", "www.youtube.com",
             "reddit.com", "www.reddit.com",
             "twitter.com", "x.com",
         ],
-        whitelistedApps: ["Terminal", "Notes", "Books", "Spotify", "iTerm2"],
+        whitelistedApps: [],
+        whitelistedAppBundleIDs: [
+            "com.apple.Terminal", "com.apple.Notes", "com.apple.iBooksX",
+            "com.spotify.client", "com.googlecode.iterm2",
+        ],
         checklist: [
             "Brush teeth",
             "Set out clothes for tomorrow",
@@ -52,6 +64,23 @@ struct LightsOutConfig: Codable {
         shortcutName: "Bedtime",
         showCountdownInMenuBar: true
     )
+
+    /// Returns the effective set of blocked bundle IDs.
+    /// Prefers blockedAppBundleIDs if set; otherwise falls back to name-based lookup.
+    func effectiveBlockedBundleIDs(scanner: InstalledAppScanner) -> [String] {
+        if let ids = blockedAppBundleIDs, !ids.isEmpty {
+            return ids
+        }
+        return blockedApps.compactMap { scanner.bundleID(forDisplayName: $0) }
+    }
+
+    /// Returns the effective set of whitelisted bundle IDs.
+    func effectiveWhitelistedBundleIDs(scanner: InstalledAppScanner) -> [String] {
+        if let ids = whitelistedAppBundleIDs, !ids.isEmpty {
+            return ids
+        }
+        return whitelistedApps.compactMap { scanner.bundleID(forDisplayName: $0) }
+    }
 
     /// Parse a time string like "22:30" into hour and minute components.
     func parseTime(_ timeString: String) -> (hour: Int, minute: Int)? {
@@ -71,7 +100,6 @@ struct LightsOutConfig: Codable {
     }
 
     /// Validate that phases are in chronological order within a 24-hour cycle starting from morning reset.
-    /// Times wrap around midnight (e.g. morning 06:00, amber 22:30, winddown 23:00, lightsOut 00:30 is valid).
     func validate() -> [String] {
         var errors: [String] = []
 
@@ -112,7 +140,6 @@ struct LightsOutConfig: Codable {
     }
 
     /// Get a Date for a given time string on today's date.
-    /// If the time is before morningReset, it's treated as tomorrow (for overnight scheduling).
     func dateForTime(_ timeString: String) -> Date? {
         guard let (hour, minute) = parseTime(timeString) else { return nil }
         let calendar = Calendar.current
@@ -126,12 +153,16 @@ struct LightsOutConfig: Codable {
 }
 
 class ConfigManager {
-    private(set) var config: LightsOutConfig
+    var config: LightsOutConfig
+    let scanner: InstalledAppScanner
     private var fileDescriptor: Int32 = -1
     private var dispatchSource: DispatchSourceFileSystemObject?
+    private var suppressFileWatch = false
     var onConfigReloaded: (() -> Void)?
 
     init() {
+        scanner = InstalledAppScanner()
+
         let fm = FileManager.default
         let configDir = Constants.configDirectory
         let configFile = Constants.configFile
@@ -152,6 +183,9 @@ class ConfigManager {
             save()
         }
 
+        // Migrate name-based blocked/whitelisted to bundle IDs
+        migrateIfNeeded()
+
         let errors = config.validate()
         for error in errors {
             print("[LightsOut] Config warning: \(error)")
@@ -162,6 +196,40 @@ class ConfigManager {
 
     deinit {
         stopWatching()
+    }
+
+    /// Migrate legacy name-based app lists to bundle IDs.
+    private func migrateIfNeeded() {
+        var changed = false
+
+        if config.blockedAppBundleIDs == nil && !config.blockedApps.isEmpty {
+            let resolved = config.blockedApps.compactMap { name -> String? in
+                if let id = scanner.bundleID(forDisplayName: name) {
+                    return id
+                }
+                print("[LightsOut] Migration: could not resolve '\(name)' to a bundle ID")
+                return nil
+            }
+            config.blockedAppBundleIDs = resolved
+            changed = true
+        }
+
+        if config.whitelistedAppBundleIDs == nil && !config.whitelistedApps.isEmpty {
+            let resolved = config.whitelistedApps.compactMap { name -> String? in
+                if let id = scanner.bundleID(forDisplayName: name) {
+                    return id
+                }
+                print("[LightsOut] Migration: could not resolve '\(name)' to a bundle ID")
+                return nil
+            }
+            config.whitelistedAppBundleIDs = resolved
+            changed = true
+        }
+
+        if changed {
+            save()
+            print("[LightsOut] Migrated config to bundle identifiers")
+        }
     }
 
     private func startWatching() {
@@ -176,6 +244,7 @@ class ConfigManager {
         )
         source.setEventHandler { [weak self] in
             guard let self else { return }
+            if self.suppressFileWatch { return }
             // Small delay to let the editor finish writing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 self.reload()
@@ -198,10 +267,18 @@ class ConfigManager {
     }
 
     func save() {
+        suppressFileWatch = true
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(config) else { return }
+        guard let data = try? encoder.encode(config) else {
+            suppressFileWatch = false
+            return
+        }
         try? data.write(to: Constants.configFile)
+        // Re-enable file watching after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.suppressFileWatch = false
+        }
     }
 
     func reload() {
