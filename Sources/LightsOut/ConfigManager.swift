@@ -46,7 +46,7 @@ struct LightsOutConfig: Codable {
             "Review tomorrow's calendar",
         ],
         frictionDelaysSeconds: [60, 180, 600],
-        enableShortcutTrigger: true,
+        enableShortcutTrigger: false,
         shortcutName: "Bedtime"
     )
 
