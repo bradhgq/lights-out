@@ -12,6 +12,7 @@ struct LightsOutConfig: Codable {
     var frictionDelaysSeconds: [Int]
     var enableShortcutTrigger: Bool
     var shortcutName: String
+    var showCountdownInMenuBar: Bool
 
     enum CodingKeys: String, CodingKey {
         case amberTime = "amber_time"
@@ -25,6 +26,7 @@ struct LightsOutConfig: Codable {
         case frictionDelaysSeconds = "friction_delays_seconds"
         case enableShortcutTrigger = "enable_shortcut_trigger"
         case shortcutName = "shortcut_name"
+        case showCountdownInMenuBar = "show_countdown_in_menu_bar"
     }
 
     static let defaults = LightsOutConfig(
@@ -47,7 +49,8 @@ struct LightsOutConfig: Codable {
         ],
         frictionDelaysSeconds: [60, 180, 600],
         enableShortcutTrigger: false,
-        shortcutName: "Bedtime"
+        shortcutName: "Bedtime",
+        showCountdownInMenuBar: true
     )
 
     /// Parse a time string like "22:30" into hour and minute components.

@@ -7,6 +7,7 @@ class MenuBarController: NSObject, NSMenuItemValidation {
     private let phaseManager: PhaseManager
     private let checklistManager: ChecklistManager
     private var checklistMenuItems: [NSMenuItem] = []
+    var showCountdownInMenuBar = true
 
     init(phaseManager: PhaseManager, checklistManager: ChecklistManager) {
         self.phaseManager = phaseManager
@@ -50,7 +51,10 @@ class MenuBarController: NSObject, NSMenuItemValidation {
     }
 
     func updateCountdown(_ text: String) {
-        statusItem.button?.title = " \(text)"
+        // Always show in dropdown menu
+        statusItem.menu?.items.first(where: { $0.tag == 51 })?.title = text
+        // Optionally also show in menubar
+        statusItem.button?.title = showCountdownInMenuBar ? " \(text)" : ""
     }
 
     func refreshChecklist() {
@@ -87,6 +91,11 @@ class MenuBarController: NSObject, NSMenuItemValidation {
         phaseItem.tag = 50
         phaseItem.isEnabled = false
         menu.addItem(phaseItem)
+
+        let countdownItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        countdownItem.tag = 51
+        countdownItem.isEnabled = false
+        menu.addItem(countdownItem)
 
         menu.addItem(NSMenuItem.separator())
 

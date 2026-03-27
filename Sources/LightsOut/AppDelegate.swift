@@ -64,6 +64,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             phaseManager: phaseManager,
             checklistManager: checklistManager
         )
+        menuBarController.showCountdownInMenuBar = config.showCountdownInMenuBar
 
         // Swallow Cmd+Q when not idle
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -239,6 +240,7 @@ extension AppDelegate: PhaseManagerDelegate {
             frictionDelays: config.frictionDelaysSeconds
         )
         checklistManager.reset(items: config.checklist)
+        menuBarController.showCountdownInMenuBar = config.showCountdownInMenuBar
         menuBarController.refreshChecklist()
         print("[LightsOut] Config applied")
     }
