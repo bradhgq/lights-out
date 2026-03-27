@@ -4,8 +4,11 @@ import IOKit.graphics
 
 class DisplayManager {
     private var originalBrightness: Float?
+    var originalBrightnessChanged: Bool { originalBrightness != nil }
+    private(set) var gammaActive = false
 
     func setWarmGamma() {
+        gammaActive = true
         let display = CGMainDisplayID()
         // Reduce blue significantly, green slightly, for a warm amber tone
         CGSetDisplayTransferByFormula(
@@ -17,6 +20,8 @@ class DisplayManager {
     }
 
     func resetGamma() {
+        guard gammaActive else { return }
+        gammaActive = false
         CGDisplayRestoreColorSyncSettings()
     }
 

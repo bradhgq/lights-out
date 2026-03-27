@@ -18,6 +18,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var previousPhase: Phase = .idle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Refuse to launch if another instance is already running
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let others = NSWorkspace.shared.runningApplications.filter {
+            $0.localizedName == "LightsOut" && $0.processIdentifier != currentPID
+        }
+        if !others.isEmpty {
+            print("[LightsOut] Another instance is already running (PID \(others.first!.processIdentifier)). Quitting to avoid display conflicts.")
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+            return
+        }
+
         HelperInstaller.installIfNeeded()
 
         configManager = ConfigManager()
@@ -84,6 +95,25 @@ extension AppDelegate {
             return .terminateCancel
         }
         return .terminateNow
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // If another instance is running, let it own display state
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let others = NSWorkspace.shared.runningApplications.filter {
+            $0.localizedName == "LightsOut" && $0.processIdentifier != currentPID
+        }
+        if !others.isEmpty {
+            print("[LightsOut] Another instance is running, skipping display cleanup.")
+            return
+        }
+
+        if displayManager.gammaActive {
+            displayManager.resetGamma()
+        }
+        if displayManager.originalBrightnessChanged {
+            displayManager.restoreBrightness()
+        }
     }
 }
 
