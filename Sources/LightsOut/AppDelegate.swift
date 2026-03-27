@@ -39,12 +39,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         displayManager = DisplayManager()
         hostFileManager = HostFileManager()
         notificationManager = NotificationManager()
+        notificationManager.onNotificationClicked = { [weak self] in
+            self?.checklistWindow.show()
+        }
         shortcutTrigger = ShortcutTrigger()
         frictionOverlay = FrictionOverlayController()
 
         appMonitor = AppMonitor(
             blockedApps: config.blockedApps,
-            whitelistedApps: config.whitelistedApps,
             frictionDelays: config.frictionDelaysSeconds,
             frictionOverlay: frictionOverlay,
             overrideLogger: overrideLogger
@@ -234,7 +236,6 @@ extension AppDelegate: PhaseManagerDelegate {
         phaseManager.updateConfig(config)
         appMonitor.updateConfig(
             blockedApps: config.blockedApps,
-            whitelistedApps: config.whitelistedApps,
             frictionDelays: config.frictionDelaysSeconds
         )
         checklistManager.reset(items: config.checklist)

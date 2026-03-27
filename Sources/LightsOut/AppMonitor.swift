@@ -3,8 +3,8 @@ import Foundation
 import LightsOutCore
 
 class AppMonitor {
+    /// Lowercased blocked app names for case-insensitive matching
     private var blockedApps: Set<String>
-    private var whitelistedApps: Set<String>
     private var frictionDelays: [Int]
     private let frictionOverlay: FrictionOverlayController
     private let overrideLogger: OverrideLogger
@@ -20,13 +20,11 @@ class AppMonitor {
 
     init(
         blockedApps: [String],
-        whitelistedApps: [String],
         frictionDelays: [Int],
         frictionOverlay: FrictionOverlayController,
         overrideLogger: OverrideLogger
     ) {
-        self.blockedApps = Set(blockedApps)
-        self.whitelistedApps = Set(whitelistedApps)
+        self.blockedApps = Set(blockedApps.map { $0.lowercased() })
         self.frictionDelays = frictionDelays
         self.frictionOverlay = frictionOverlay
         self.overrideLogger = overrideLogger
@@ -68,10 +66,14 @@ class AppMonitor {
         temporarilyAllowed.removeAll()
     }
 
+    private func isBlocked(_ name: String) -> Bool {
+        blockedApps.contains(name.lowercased())
+    }
+
     func hideBlockedApps() {
         let running = NSWorkspace.shared.runningApplications
         for app in running {
-            guard let name = app.localizedName, blockedApps.contains(name) else { continue }
+            guard let name = app.localizedName, isBlocked(name) else { continue }
             if temporarilyAllowed.contains(name) { continue }
             app.hide()
             hiddenApps[name] = app
@@ -87,9 +89,8 @@ class AppMonitor {
         hiddenApps.removeAll()
     }
 
-    func updateConfig(blockedApps: [String], whitelistedApps: [String], frictionDelays: [Int]) {
-        self.blockedApps = Set(blockedApps)
-        self.whitelistedApps = Set(whitelistedApps)
+    func updateConfig(blockedApps: [String], frictionDelays: [Int]) {
+        self.blockedApps = Set(blockedApps.map { $0.lowercased() })
         self.frictionDelays = frictionDelays
     }
 
@@ -118,7 +119,7 @@ class AppMonitor {
     @objc private func appDidLaunch(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
               let name = app.localizedName,
-              blockedApps.contains(name),
+              isBlocked(name),
               !temporarilyAllowed.contains(name)
         else { return }
         handleBlockedApp(name: name, app: app)
@@ -127,7 +128,7 @@ class AppMonitor {
     private func scanRunningApps() {
         let running = NSWorkspace.shared.runningApplications
         for app in running {
-            guard let name = app.localizedName, blockedApps.contains(name) else { continue }
+            guard let name = app.localizedName, isBlocked(name) else { continue }
             if temporarilyAllowed.contains(name) { continue }
             if app.isHidden { continue }
             handleBlockedApp(name: name, app: app)
@@ -135,7 +136,7 @@ class AppMonitor {
     }
 
     private func handleBlockedApp(name: String, app: NSRunningApplication) {
-        guard blockedApps.contains(name), !temporarilyAllowed.contains(name) else { return }
+        guard isBlocked(name), !temporarilyAllowed.contains(name) else { return }
 
         if currentPhase == .lightsOut {
             // Hide and show blocked overlay with emergency valve

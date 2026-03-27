@@ -20,5 +20,13 @@ cp "$BUILD_DIR/LightsOutHelper" "$APP_DIR/Contents/MacOS/LightsOutHelper"
 cp "$PROJECT_DIR/resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$PROJECT_DIR/resources/com.lightsout.helper.plist" "$APP_DIR/Contents/Resources/com.lightsout.helper.plist"
 
+echo "Compiling asset catalog..."
+xcrun actool "$PROJECT_DIR/resources/Assets.xcassets" \
+  --compile "$APP_DIR/Contents/Resources" \
+  --platform macosx \
+  --minimum-deployment-target 13.0 \
+  --app-icon AppIcon \
+  --output-partial-info-plist /dev/null
+
 echo "App bundle created at: $APP_DIR"
 echo "Run with: open $APP_DIR"

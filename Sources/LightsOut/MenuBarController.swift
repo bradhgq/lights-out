@@ -2,7 +2,7 @@ import AppKit
 import LightsOutCore
 import SwiftUI
 
-class MenuBarController {
+class MenuBarController: NSObject, NSMenuItemValidation {
     private let statusItem: NSStatusItem
     private let phaseManager: PhaseManager
     private let checklistManager: ChecklistManager
@@ -12,9 +12,17 @@ class MenuBarController {
         self.phaseManager = phaseManager
         self.checklistManager = checklistManager
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-
+        super.init()
         setupMenu()
         updatePhase(.idle)
+    }
+
+    /// AppKit calls this for each menu item before display — this is what actually controls greying out
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.tag == 400 || menuItem.tag == 401 {
+            return phaseManager.currentPhase == .idle || phaseManager.devMode
+        }
+        return true
     }
 
     func updatePhase(_ phase: Phase) {
@@ -30,12 +38,15 @@ class MenuBarController {
             button.image = NSImage(systemSymbolName: "moon.zzz.fill", accessibilityDescription: "Lights Out")
         }
 
-        // Disable config/quit when not idle (unless in dev mode)
-        let allowControls = phase == .idle || phaseManager.devMode
-        if let menu = statusItem.menu {
-            menu.items.first(where: { $0.tag == 400 })?.isEnabled = allowControls
-            menu.items.first(where: { $0.tag == 401 })?.isEnabled = allowControls
+        // Update phase label in menu
+        let phaseName: String
+        switch phase {
+        case .idle: phaseName = "Idle"
+        case .amber: phaseName = "Amber"
+        case .windDown: phaseName = "Wind Down"
+        case .lightsOut: phaseName = "Lights Out"
         }
+        statusItem.menu?.items.first(where: { $0.tag == 50 })?.title = "Phase: \(phaseName)"
     }
 
     func updateCountdown(_ text: String) {
