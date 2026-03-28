@@ -1,12 +1,25 @@
-import Foundation
+import AppKit
 
-struct InstalledAppInfo: Identifiable, Hashable, Comparable {
+struct InstalledAppInfo: Identifiable, Comparable {
     let id: String          // bundle identifier
     let displayName: String // user-facing name
     let url: URL            // path to .app bundle
 
+    var icon: NSImage {
+        NSWorkspace.shared.icon(forFile: url.path)
+    }
+
     static func < (lhs: InstalledAppInfo, rhs: InstalledAppInfo) -> Bool {
         lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+    }
+
+    // Identifiable + Equatable by bundle ID only
+    static func == (lhs: InstalledAppInfo, rhs: InstalledAppInfo) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }
 
@@ -43,6 +56,11 @@ class InstalledAppScanner {
     /// Resolve a bundle identifier to a display name.
     func displayName(forBundleID bundleID: String) -> String? {
         apps.first { $0.id == bundleID }?.displayName
+    }
+
+    /// Resolve a bundle identifier to full app info.
+    func appInfo(forBundleID bundleID: String) -> InstalledAppInfo? {
+        apps.first { $0.id == bundleID }
     }
 
     // MARK: - Private

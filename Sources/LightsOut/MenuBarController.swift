@@ -151,6 +151,7 @@ class MenuBarController: NSObject, NSMenuItemValidation {
         )
         settingsItem.target = self
         settingsItem.tag = 400
+        settingsItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
         menu.addItem(settingsItem)
 
         let quitItem = NSMenuItem(
@@ -160,6 +161,7 @@ class MenuBarController: NSObject, NSMenuItemValidation {
         )
         quitItem.target = self
         quitItem.tag = 401
+        quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: "Quit")
         menu.addItem(quitItem)
 
         statusItem.menu = menu

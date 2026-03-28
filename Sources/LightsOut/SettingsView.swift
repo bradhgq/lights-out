@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     let configManager: ConfigManager
     let onSave: () -> Void
+    let onCancel: () -> Void
 
     @State private var amberTime: String
     @State private var winddownTime: String
@@ -23,14 +24,16 @@ struct SettingsView: View {
     @State private var newDomain: String = ""
     @State private var newChecklistItem: String = ""
     @State private var newFrictionDelay: String = ""
+    @State private var isDirty = false
 
     enum AppPickerTarget {
         case blocked, whitelisted
     }
 
-    init(configManager: ConfigManager, onSave: @escaping () -> Void) {
+    init(configManager: ConfigManager, onSave: @escaping () -> Void, onCancel: @escaping () -> Void) {
         self.configManager = configManager
         self.onSave = onSave
+        self.onCancel = onCancel
         let c = configManager.config
         _amberTime = State(initialValue: c.amberTime)
         _winddownTime = State(initialValue: c.winddownTime)
@@ -47,24 +50,42 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        TabView {
-            scheduleTab
-                .tabItem { Label("Schedule", systemImage: "clock") }
+        VStack(spacing: 0) {
+            TabView {
+                scheduleTab
+                    .tabItem { Label("Schedule", systemImage: "clock") }
 
-            appsTab
-                .tabItem { Label("Apps", systemImage: "app.badge") }
+                appsTab
+                    .tabItem { Label("Apps", systemImage: "app.badge") }
 
-            domainsTab
-                .tabItem { Label("Domains", systemImage: "globe") }
+                domainsTab
+                    .tabItem { Label("Domains", systemImage: "globe") }
 
-            checklistTab
-                .tabItem { Label("Checklist", systemImage: "checklist") }
+                checklistTab
+                    .tabItem { Label("Checklist", systemImage: "checklist") }
 
-            advancedTab
-                .tabItem { Label("Advanced", systemImage: "gearshape") }
+                advancedTab
+                    .tabItem { Label("Advanced", systemImage: "gearshape") }
+            }
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    onCancel()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Save") {
+                    save()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!isDirty)
+            }
+            .padding()
         }
-        .padding()
-        .frame(minWidth: 480, minHeight: 500)
+        .frame(minWidth: 480, minHeight: 540)
         .sheet(isPresented: $showAppPicker) {
             AppPickerSheet(
                 scanner: configManager.scanner,
@@ -77,7 +98,7 @@ struct SettingsView: View {
                         whitelistedBundleIDs.append(info.id)
                     }
                     showAppPicker = false
-                    save()
+                    isDirty = true
                 },
                 onCancel: { showAppPicker = false }
             )
@@ -89,15 +110,14 @@ struct SettingsView: View {
     private var scheduleTab: some View {
         Form {
             Section("Phase Times") {
-                TimeField(label: "Amber", time: $amberTime, onCommit: save)
-                TimeField(label: "Wind-down", time: $winddownTime, onCommit: save)
-                TimeField(label: "Lights Out", time: $lightsOutTime, onCommit: save)
-                TimeField(label: "Morning Reset", time: $morningResetTime, onCommit: save)
+                TimeField(label: "Amber", time: $amberTime)
+                TimeField(label: "Wind-down", time: $winddownTime)
+                TimeField(label: "Lights Out", time: $lightsOutTime)
+                TimeField(label: "Morning Reset", time: $morningResetTime)
             }
 
             Section("Display") {
                 Toggle("Show countdown in menu bar", isOn: $showCountdownInMenuBar)
-                    .onChange(of: showCountdownInMenuBar) { _ in save() }
             }
 
             if !validationErrors.isEmpty {
@@ -115,6 +135,11 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onChange(of: amberTime) { _ in isDirty = true }
+        .onChange(of: winddownTime) { _ in isDirty = true }
+        .onChange(of: lightsOutTime) { _ in isDirty = true }
+        .onChange(of: morningResetTime) { _ in isDirty = true }
+        .onChange(of: showCountdownInMenuBar) { _ in isDirty = true }
     }
 
     // MARK: - Apps Tab
@@ -149,27 +174,29 @@ struct SettingsView: View {
     @ViewBuilder
     private func bundleIDList(ids: Binding<[String]>) -> some View {
         ForEach(ids.wrappedValue, id: \.self) { bundleID in
-            HStack {
-                let displayName = configManager.scanner.displayName(forBundleID: bundleID)
-                VStack(alignment: .leading) {
-                    Text(displayName ?? bundleID)
-                        .font(.body)
-                    if displayName != nil {
-                        Text(bundleID)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+            HStack(spacing: 12) {
+                if let appInfo = configManager.scanner.appInfo(forBundleID: bundleID) {
+                    Image(nsImage: appInfo.icon)
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                    Text(appInfo.displayName)
+                } else {
+                    Image(systemName: "app")
+                        .frame(width: 32, height: 32)
+                    Text(bundleID)
+                        .foregroundColor(.secondary)
                 }
                 Spacer()
                 Button(role: .destructive) {
                     ids.wrappedValue.removeAll { $0 == bundleID }
-                    save()
+                    isDirty = true
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .foregroundColor(.red)
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.vertical, 2)
         }
     }
 
@@ -184,7 +211,7 @@ struct SettingsView: View {
                         Spacer()
                         Button(role: .destructive) {
                             blockedDomains.removeAll { $0 == domain }
-                            save()
+                            isDirty = true
                         } label: {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundColor(.red)
@@ -216,7 +243,7 @@ struct SettingsView: View {
                         Spacer()
                         Button(role: .destructive) {
                             checklist.remove(at: index)
-                            save()
+                            isDirty = true
                         } label: {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundColor(.red)
@@ -247,13 +274,13 @@ struct SettingsView: View {
                         Text("\(delay)s")
                             .monospacedDigit()
                         if index < frictionDelays.count - 1 {
-                            Text("→")
+                            Text("\u{2192}")
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
                         Button(role: .destructive) {
                             frictionDelays.remove(at: index)
-                            save()
+                            isDirty = true
                         } label: {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundColor(.red)
@@ -263,10 +290,12 @@ struct SettingsView: View {
                 }
 
                 HStack {
-                    TextField("seconds", text: $newFrictionDelay)
+                    TextField("e.g. 300", text: $newFrictionDelay)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
+                        .frame(width: 80)
                         .onSubmit { addFrictionDelay() }
+                    Text("sec")
+                        .foregroundColor(.secondary)
                     Button("Add") { addFrictionDelay() }
                         .disabled(Int(newFrictionDelay) == nil)
                 }
@@ -278,14 +307,14 @@ struct SettingsView: View {
 
             Section("Shortcuts Integration") {
                 Toggle("Trigger macOS Shortcut at Lights Out", isOn: $enableShortcutTrigger)
-                    .onChange(of: enableShortcutTrigger) { _ in save() }
+                    .onChange(of: enableShortcutTrigger) { _ in isDirty = true }
 
                 if enableShortcutTrigger {
                     HStack {
                         Text("Shortcut name:")
                         TextField("Bedtime", text: $shortcutName)
                             .textFieldStyle(.roundedBorder)
-                            .onSubmit { save() }
+                            .onChange(of: shortcutName) { _ in isDirty = true }
                     }
                 }
             }
@@ -311,6 +340,7 @@ struct SettingsView: View {
         config.showCountdownInMenuBar = showCountdownInMenuBar
 
         validationErrors = config.validate()
+        if !validationErrors.isEmpty { return }
 
         configManager.config = config
         configManager.save()
@@ -322,7 +352,7 @@ struct SettingsView: View {
         guard !domain.isEmpty, !blockedDomains.contains(domain) else { return }
         blockedDomains.append(domain)
         newDomain = ""
-        save()
+        isDirty = true
     }
 
     private func addChecklistItem() {
@@ -330,14 +360,14 @@ struct SettingsView: View {
         guard !item.isEmpty else { return }
         checklist.append(item)
         newChecklistItem = ""
-        save()
+        isDirty = true
     }
 
     private func addFrictionDelay() {
         guard let seconds = Int(newFrictionDelay), seconds > 0 else { return }
         frictionDelays.append(seconds)
         newFrictionDelay = ""
-        save()
+        isDirty = true
     }
 }
 
@@ -346,17 +376,15 @@ struct SettingsView: View {
 struct TimeField: View {
     let label: String
     @Binding var time: String
-    let onCommit: () -> Void
 
     var body: some View {
         HStack {
             Text(label)
             Spacer()
-            TextField("HH:mm", text: $time)
+            TextField("00:00", text: $time)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
+                .frame(width: 70)
                 .multilineTextAlignment(.center)
-                .onSubmit { onCommit() }
         }
     }
 }
@@ -400,17 +428,15 @@ struct AppPickerSheet: View {
                 Button {
                     onSelect(app)
                 } label: {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(app.displayName)
-                                .font(.body)
-                            Text(app.id)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                    HStack(spacing: 12) {
+                        Image(nsImage: app.icon)
+                            .resizable()
+                            .frame(width: 32, height: 32)
+                        Text(app.displayName)
                         Spacer()
                     }
                     .contentShape(Rectangle())
+                    .padding(.vertical, 2)
                 }
                 .buttonStyle(.plain)
             }

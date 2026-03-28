@@ -94,7 +94,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         notificationManager.requestPermission()
+
+        // Re-apply display state when waking from sleep (macOS resets gamma)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            let phase = self.phaseManager.currentPhase
+            if phase != .idle {
+                print("[LightsOut] Display woke, re-applying phase: \(phase)")
+                // Small delay — macOS needs a moment to finish display init
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.reapplyDisplayState()
+                }
+            }
+        }
+
         phaseManager.start()
+    }
+
+    private func reapplyDisplayState() {
+        guard let behavior = phaseBehaviors[phaseManager.currentPhase] else { return }
+        if behavior.warmGamma {
+            displayManager.setWarmGamma()
+        }
+        if behavior.dimBrightness {
+            displayManager.setMinimumBrightness()
+        }
     }
 }
 

@@ -167,6 +167,7 @@ class AppMonitor {
                     self.overrideTimers.removeValue(forKey: bundleID)
                     self.overrideExpiries.removeValue(forKey: bundleID)
                     print("[LightsOut] Emergency override expired for \(displayName)")
+                    self.scanRunningApps()
                 }
             }
             return
@@ -211,6 +212,7 @@ class AppMonitor {
                 self.overrideTimers.removeValue(forKey: bundleID)
                 self.overrideExpiries.removeValue(forKey: bundleID)
                 print("[LightsOut] Override expired for \(displayName) after \(minutes) min")
+                self.scanRunningApps()
             }
         }
     }

@@ -21,6 +21,10 @@ class SettingsWindowController {
             configManager: configManager,
             onSave: { [weak self] in
                 self?.onConfigChanged?()
+                self?.dismiss()
+            },
+            onCancel: { [weak self] in
+                self?.dismiss()
             }
         )
 
