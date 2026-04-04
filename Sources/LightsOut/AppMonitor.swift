@@ -37,6 +37,8 @@ class AppMonitor {
 
         if !isMonitoring {
             isMonitoring = true
+
+            // Primary: event-driven, fires instantly when any app launches
             NSWorkspace.shared.notificationCenter.addObserver(
                 self,
                 selector: #selector(appDidLaunch(_:)),
@@ -44,8 +46,16 @@ class AppMonitor {
                 object: nil
             )
 
-            // Polling fallback every 2 seconds
-            pollingTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            // Also catch unhide events (user Cmd+Tab or Dock click on hidden app)
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self,
+                selector: #selector(appDidActivate(_:)),
+                name: NSWorkspace.didActivateApplicationNotification,
+                object: nil
+            )
+
+            // Safety net: infrequent poll to catch anything the events missed
+            pollingTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
                 self?.scanRunningApps()
             }
             if let timer = pollingTimer {
@@ -60,6 +70,11 @@ class AppMonitor {
         NSWorkspace.shared.notificationCenter.removeObserver(
             self,
             name: NSWorkspace.didLaunchApplicationNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.removeObserver(
+            self,
+            name: NSWorkspace.didActivateApplicationNotification,
             object: nil
         )
         pollingTimer?.invalidate()
@@ -131,12 +146,22 @@ class AppMonitor {
         handleBlockedApp(bundleID: bundleID, app: app)
     }
 
+    @objc private func appDidActivate(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              let bundleID = app.bundleIdentifier,
+              isBlocked(bundleID),
+              !temporarilyAllowed.contains(bundleID)
+        else { return }
+        handleBlockedApp(bundleID: bundleID, app: app)
+    }
+
     private func scanRunningApps() {
         let running = NSWorkspace.shared.runningApplications
         for app in running {
             guard let bundleID = app.bundleIdentifier, isBlocked(bundleID) else { continue }
             if temporarilyAllowed.contains(bundleID) { continue }
-            if app.isHidden { continue }
+            // Skip apps we've already hidden — don't poke unresponsive apps repeatedly
+            if hiddenApps[bundleID] != nil && app.isHidden { continue }
             handleBlockedApp(bundleID: bundleID, app: app)
         }
     }
