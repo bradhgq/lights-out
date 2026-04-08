@@ -19,7 +19,13 @@ stdenvNoCC.mkDerivation rec {
 
     # Use system Swift toolchain
     export PATH="/usr/bin:$PATH"
-    swift build -c release
+
+    # SwiftPM needs a writable HOME for its cache/manifest db
+    export HOME=$(mktemp -d)
+
+    # Disable SwiftPM's internal sandbox — it calls sandbox-exec which
+    # is blocked in the nix build environment (Determinate Nix)
+    swift build -c release --disable-sandbox
 
     runHook postBuild
   '';
