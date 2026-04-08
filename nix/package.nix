@@ -59,6 +59,10 @@ stdenvNoCC.mkDerivation rec {
     runHook postInstall
   '';
 
+  # Skip fixup phase — macOS find doesn't support GNU -printf,
+  # and there's nothing to patch in native Swift binaries
+  fixupPhase = "true";
+
   meta = with lib; {
     description = "macOS menubar app that enforces evening wind-down routines";
     homepage = "https://github.com/bradhgq/lights-out";
