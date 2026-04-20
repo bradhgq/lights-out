@@ -19,6 +19,15 @@ let
   });
 
   appPath = "${cfg.package}/Applications/LightsOut.app";
+
+  # The helper runs as a LaunchDaemon at early boot, before Determinate Nix's
+  # /nix APFS volume is guaranteed to be mounted. If the plist's Program path
+  # lives under /nix/store, launchd can spawn it before the mount is ready and
+  # fail with "Missing executable detected" (EX_CONFIG=78). With KeepAlive and
+  # the default minimum runtime of 10s, launchd then throttles further attempts
+  # and the helper never comes up. We copy the helper to the boot volume during
+  # activation so the Program path is always resolvable.
+  helperInstallPath = "/Library/PrivilegedHelperTools/com.lightsout.helper";
 in
 {
   options.services.lights-out = {
@@ -109,12 +118,31 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Write config file on activation
+    # Post-activation: write the runtime config file, and install the privileged
+    # helper binary to a stable path on the boot volume.
+    #
+    # Why the helper isn't run directly from /nix/store: LaunchDaemons spawn at
+    # early boot, before Determinate Nix's /nix APFS volume is guaranteed to be
+    # mounted. A Program path under /nix/store then causes launchd to exit the
+    # job with EX_CONFIG=78 ("Missing executable detected"), and with KeepAlive
+    # + the default 10s minimum runtime, launchd throttles further attempts and
+    # the helper never comes up. Installing to /Library/PrivilegedHelperTools
+    # sidesteps the race entirely. `launchctl kickstart -k` picks up the new
+    # binary on rebuilds (the plist path is stable so nix-darwin's own
+    # plist-changed reload doesn't fire).
     system.activationScripts.postActivation.text = ''
       LIGHTSOUT_DIR="$HOME/.lightsout"
       mkdir -p "$LIGHTSOUT_DIR"
       cp ${configFile} "$LIGHTSOUT_DIR/config.json"
       chmod 644 "$LIGHTSOUT_DIR/config.json"
+
+      echo "installing com.lightsout.helper binary to ${helperInstallPath}..."
+      /usr/bin/install -m 755 -o root -g wheel \
+        ${appPath}/Contents/MacOS/LightsOutHelper \
+        ${helperInstallPath}
+      if /bin/launchctl print system/com.lightsout.helper >/dev/null 2>&1; then
+        /bin/launchctl kickstart -k system/com.lightsout.helper || true
+      fi
     '';
 
     # LaunchAgent for the main menubar app (runs as current user in GUI session)
@@ -130,11 +158,13 @@ in
       };
     };
 
-    # LaunchDaemon for the privileged helper (runs as root)
+    # LaunchDaemon for the privileged helper (runs as root).
+    # Program points at the stable install path (see helperInstallPath above);
+    # the binary there is kept in sync by the activation script.
     launchd.daemons.lights-out-helper = {
       serviceConfig = {
         Label = "com.lightsout.helper";
-        Program = "${appPath}/Contents/MacOS/LightsOutHelper";
+        Program = helperInstallPath;
         RunAtLoad = true;
         KeepAlive = true;
         StandardOutPath = "/var/log/lightsout-helper.log";

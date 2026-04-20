@@ -40,7 +40,6 @@ stdenvNoCC.mkDerivation rec {
     cp .build/release/LightsOut "$APP/MacOS/LightsOut"
     cp .build/release/LightsOutHelper "$APP/MacOS/LightsOutHelper"
     cp resources/Info.plist "$APP/Info.plist"
-    cp resources/com.lightsout.helper.plist "$APP/Resources/com.lightsout.helper.plist"
 
     # Skip actool (requires Xcode) — app works without custom icon
     # If you have Xcode CLT, uncomment:

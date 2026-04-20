@@ -30,8 +30,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        HelperInstaller.installIfNeeded()
-
+        // Helper installation is owned by the nix-darwin module. Do not try
+        // to self-install from the app: the previous osascript-based install
+        // path clobbered the nix-darwin-managed plist/binary and surfaced an
+        // admin-password prompt at every login whenever the socket wasn't
+        // ready yet. If the helper is unreachable at runtime, HostFileManager
+        // still falls back to its osascript path for the one edit it needs.
         configManager = ConfigManager()
         let config = configManager.config
 
