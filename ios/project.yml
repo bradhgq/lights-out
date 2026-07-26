@@ -1,0 +1,173 @@
+# XcodeGen spec for the iOS companion app.
+#
+# Run `xcodegen generate` in this directory to produce LightsOutiOS.xcodeproj.
+# The produced .xcodeproj is gitignored (see ../.gitignore) so regeneration is
+# always lossless — edit this file, never the .pbxproj.
+#
+# Build/sideload workflow is documented in ios/README.md. TL;DR:
+#   1. brew install xcodegen
+#   2. cd ios && xcodegen generate
+#   3. Open LightsOutiOS.xcodeproj in Xcode
+#   4. Set the team on all four targets, build to device
+
+name: LightsOutiOS
+options:
+  bundleIdPrefix: com.lightsout
+  deploymentTarget:
+    iOS: "17.0"       # minimum; Family Controls works from 16 but shield-action APIs
+                      # we rely on are cleaner from 17.
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+# LightsOutCore is the shared Swift package one level up. Xcode resolves it as a
+# local package reference; only the `LightsOutCore` library product is linked into
+# iOS targets (executables in the package are macOS-only and never built here).
+packages:
+  LightsOutCore:
+    path: ..
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # Personal signing — user must set DEVELOPMENT_TEAM in Xcode per-target when
+    # sideloading. We don't commit a team ID.
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+
+  # ─── Main app ───────────────────────────────────────────────────────────────
+  LightsOutiOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: LightsOutiOS
+    resources:
+      - path: LightsOutiOS/Resources
+    dependencies:
+      - package: LightsOutCore
+        product: LightsOutCore
+      - target: LightsOutMonitor
+      - target: LightsOutShield
+      - target: LightsOutShieldAction
+    info:
+      path: LightsOutiOS/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Lights Out
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Allow launching the Shortcuts app via its URL scheme so the grayscale
+        # setup wizard can deep-link to the user's Shortcut library.
+        LSApplicationQueriesSchemes:
+          - shortcuts
+    entitlements:
+      path: LightsOutiOS/Resources/LightsOutiOS.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.lightsout.shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lightsout.ios
+        TARGETED_DEVICE_FAMILY: "1"    # iPhone only for now
+        SUPPORTS_MACCATALYST: NO
+
+  # ─── DeviceActivity monitor extension ───────────────────────────────────────
+  # Invoked by the system at scheduled phase boundaries (amber start, windDown
+  # start, lightsOut start, morning reset). Applies ManagedSettings shields to
+  # the user-selected apps/domains.
+  LightsOutMonitor:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/DeviceActivityMonitor
+      # Shared app-group + phase-state + ManagedSettings helpers. Both the main app
+      # and the extensions need this code; we include it by reference rather than
+      # duplicating, so edits in Shared/ apply to every target at once.
+      - path: LightsOutiOS/Shared
+    dependencies:
+      - package: LightsOutCore
+        product: LightsOutCore
+    info:
+      path: Extensions/DeviceActivityMonitor/Info.plist
+      properties:
+        CFBundleDisplayName: Lights Out Monitor
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).LightsOutMonitor"
+    entitlements:
+      path: Extensions/DeviceActivityMonitor/Monitor.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.lightsout.shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lightsout.ios.monitor
+
+  # ─── Shield configuration extension ─────────────────────────────────────────
+  # Renders the "this app is resting" UI when a user taps a shielded app.
+  # Runs in an isolated process, reads current phase from the App Group.
+  LightsOutShield:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/ShieldConfiguration
+      - path: LightsOutiOS/Shared
+    dependencies:
+      - package: LightsOutCore
+        product: LightsOutCore
+    info:
+      path: Extensions/ShieldConfiguration/Info.plist
+      properties:
+        CFBundleDisplayName: Lights Out Shield
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).LightsOutShieldConfiguration"
+    entitlements:
+      path: Extensions/ShieldConfiguration/Shield.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.lightsout.shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lightsout.ios.shield
+
+  # ─── Shield action extension ────────────────────────────────────────────────
+  # Handles button taps on the shield (e.g. "Request override"). Opens the main
+  # app via universal link to drive the friction override flow.
+  LightsOutShieldAction:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/ShieldAction
+      - path: LightsOutiOS/Shared
+    dependencies:
+      - package: LightsOutCore
+        product: LightsOutCore
+    info:
+      path: Extensions/ShieldAction/Info.plist
+      properties:
+        CFBundleDisplayName: Lights Out Shield Action
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-action-service
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).LightsOutShieldAction"
+    entitlements:
+      path: Extensions/ShieldAction/ShieldAction.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.lightsout.shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lightsout.ios.shieldaction

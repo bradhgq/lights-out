@@ -1,72 +1,12 @@
 import Foundation
+import LightsOutCore
 
-struct LightsOutConfig: Codable {
-    var amberTime: String
-    var winddownTime: String
-    var lightsOutTime: String
-    var morningResetTime: String
-    var blockedApps: [String]           // legacy: display names
-    var blockedAppBundleIDs: [String]?  // preferred: bundle identifiers
-    var blockedDomains: [String]
-    var whitelistedApps: [String]              // legacy: display names
-    var whitelistedAppBundleIDs: [String]?     // preferred: bundle identifiers
-    var checklist: [String]
-    var frictionDelaysSeconds: [Int]
-    var enableShortcutTrigger: Bool
-    var shortcutName: String
-    var showCountdownInMenuBar: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case amberTime = "amber_time"
-        case winddownTime = "winddown_time"
-        case lightsOutTime = "lights_out_time"
-        case morningResetTime = "morning_reset_time"
-        case blockedApps = "blocked_apps"
-        case blockedAppBundleIDs = "blocked_app_bundle_ids"
-        case blockedDomains = "blocked_domains"
-        case whitelistedApps = "whitelisted_apps"
-        case whitelistedAppBundleIDs = "whitelisted_app_bundle_ids"
-        case checklist
-        case frictionDelaysSeconds = "friction_delays_seconds"
-        case enableShortcutTrigger = "enable_shortcut_trigger"
-        case shortcutName = "shortcut_name"
-        case showCountdownInMenuBar = "show_countdown_in_menu_bar"
-    }
-
-    static let defaults = LightsOutConfig(
-        amberTime: "22:30",
-        winddownTime: "23:00",
-        lightsOutTime: "23:30",
-        morningResetTime: "06:00",
-        blockedApps: [],
-        blockedAppBundleIDs: [
-            "com.google.Chrome", "org.mozilla.firefox", "com.apple.Safari",
-            "com.westbridge.stremio4-mac",
-        ],
-        blockedDomains: [
-            "youtube.com", "www.youtube.com",
-            "reddit.com", "www.reddit.com",
-            "twitter.com", "x.com",
-        ],
-        whitelistedApps: [],
-        whitelistedAppBundleIDs: [
-            "com.apple.Terminal", "com.apple.Notes", "com.apple.iBooksX",
-            "com.spotify.client", "com.googlecode.iterm2",
-        ],
-        checklist: [
-            "Brush teeth",
-            "Set out clothes for tomorrow",
-            "Phone on charger in other room",
-            "Review tomorrow's calendar",
-        ],
-        frictionDelaysSeconds: [60, 180, 600],
-        enableShortcutTrigger: false,
-        shortcutName: "Bedtime",
-        showCountdownInMenuBar: true
-    )
-
+/// macOS-specific extension: resolve display-name app lists to bundle IDs via the
+/// installed-app scanner. iOS doesn't have access to this (opaque tokens only), so
+/// these helpers are not in the shared core.
+extension LightsOutConfig {
     /// Returns the effective set of blocked bundle IDs.
-    /// Prefers blockedAppBundleIDs if set; otherwise falls back to name-based lookup.
+    /// Prefers `blockedAppBundleIDs` if set; otherwise falls back to name-based lookup.
     func effectiveBlockedBundleIDs(scanner: InstalledAppScanner) -> [String] {
         if let ids = blockedAppBundleIDs, !ids.isEmpty {
             return ids
@@ -82,66 +22,9 @@ struct LightsOutConfig: Codable {
         return whitelistedApps.compactMap { scanner.bundleID(forDisplayName: $0) }
     }
 
-    /// Parse a time string like "22:30" into hour and minute components.
-    func parseTime(_ timeString: String) -> (hour: Int, minute: Int)? {
-        let parts = timeString.split(separator: ":")
-        guard parts.count == 2,
-              let hour = Int(parts[0]),
-              let minute = Int(parts[1]),
-              (0...23).contains(hour),
-              (0...59).contains(minute) else { return nil }
-        return (hour, minute)
-    }
-
-    /// Convert a time string to minutes-since-midnight (0–1439).
-    private func timeToMinutes(_ time: String) -> Int? {
-        guard let (h, m) = parseTime(time) else { return nil }
-        return h * 60 + m
-    }
-
-    /// Validate that phases are in chronological order within a 24-hour cycle starting from morning reset.
-    func validate() -> [String] {
-        var errors: [String] = []
-
-        guard let morning = timeToMinutes(morningResetTime) else {
-            errors.append("Invalid morning_reset_time: \(morningResetTime)")
-            return errors
-        }
-        guard let amber = timeToMinutes(amberTime) else {
-            errors.append("Invalid amber_time: \(amberTime)")
-            return errors
-        }
-        guard let winddown = timeToMinutes(winddownTime) else {
-            errors.append("Invalid winddown_time: \(winddownTime)")
-            return errors
-        }
-        guard let lightsOut = timeToMinutes(lightsOutTime) else {
-            errors.append("Invalid lights_out_time: \(lightsOutTime)")
-            return errors
-        }
-
-        // Normalize times relative to morning reset (so morning = 0)
-        let totalMinutes = 24 * 60
-        let normAmber = (amber - morning + totalMinutes) % totalMinutes
-        let normWinddown = (winddown - morning + totalMinutes) % totalMinutes
-        let normLightsOut = (lightsOut - morning + totalMinutes) % totalMinutes
-
-        if normAmber == 0 {
-            errors.append("amber_time must be different from morning_reset_time")
-        }
-        if normWinddown < normAmber {
-            errors.append("winddown_time (\(winddownTime)) must be at or after amber_time (\(amberTime)) in the daily cycle")
-        }
-        if normLightsOut < normWinddown {
-            errors.append("lights_out_time (\(lightsOutTime)) must be at or after winddown_time (\(winddownTime)) in the daily cycle")
-        }
-
-        return errors
-    }
-
-    /// Get a Date for a given time string on today's date.
+    /// Get a `Date` for a given "HH:mm" time string on today's date.
     func dateForTime(_ timeString: String) -> Date? {
-        guard let (hour, minute) = parseTime(timeString) else { return nil }
+        guard let (hour, minute) = LightsOutCore.parseTime(timeString) else { return nil }
         let calendar = Calendar.current
         let now = Date()
         var components = calendar.dateComponents([.year, .month, .day], from: now)
