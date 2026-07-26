@@ -72,10 +72,16 @@ public enum PhaseApplier {
 
     /// Clear all phase stores. Used at morning reset, and when the user disables the
     /// app or revokes authorization.
+    ///
+    /// Also drops override bookkeeping: expiries left behind here would otherwise
+    /// re-apply a shield during the day, and the nightly counter has to reset or
+    /// tomorrow's first override would inherit tonight's escalation.
     public static func clearAll() {
         for phase in [Phase.amber, .windDown, .lightsOut] {
             clear(phase: phase)
         }
+        OverrideStore.clearAll()
+        OverrideStore.resetNightlyCounter()
         PhaseState.current = .idle
     }
 }

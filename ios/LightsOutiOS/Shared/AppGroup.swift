@@ -7,17 +7,22 @@ import Foundation
 /// this identifier. Keep this identifier in sync with each target's entitlements plist.
 public enum AppGroup {
     /// Group identifier registered in every target's entitlements.
-    public static let identifier = "group.com.lightsout.shared"
+    /// Must stay in sync with `com.apple.security.application-groups` in project.yml.
+    public static let identifier = "group.fyi.hgq.lightsout"
 
     /// Shared UserDefaults for config + runtime state visible to extensions.
+    ///
+    /// Note this cannot detect a missing App Group entitlement:
+    /// `UserDefaults(suiteName:)` returns a valid instance for any well-formed suite
+    /// name, entitled or not. An unentitled build therefore gets a *private* suite per
+    /// process, and the app and extensions silently stop seeing each other's writes.
+    /// If phase state appears not to propagate to the extensions, suspect the
+    /// entitlement first — there will be no crash and no error to go on.
     public static var userDefaults: UserDefaults {
         guard let defaults = UserDefaults(suiteName: identifier) else {
-            // This is a programmer error: missing/misspelled App Group entitlement.
-            // Failing loud beats silently falling back to standard defaults and
-            // having extensions see stale/no data.
-            fatalError(
-                "App Group '\(identifier)' is not available. Check entitlements on all targets."
-            )
+            // Only reachable if `identifier` is malformed (e.g. empty), which would be
+            // a build-time mistake in this file rather than a provisioning problem.
+            fatalError("App Group suite name '\(identifier)' is malformed.")
         }
         return defaults
     }
@@ -55,7 +60,19 @@ public enum AppGroupKey {
     /// `Date` — the timestamp of the last phase transition.
     public static let currentPhaseSince = "lightsout.currentPhaseSince"
 
-    /// `Data` — JSON-encoded `[String: Date]` mapping ApplicationToken hash to expiry,
-    /// representing per-app temporary overrides the friction flow granted.
-    public static let activeOverrides = "lightsout.activeOverrides"
+    /// `String` — phase store name written by the shield-action extension when the
+    /// user taps "Request override". The main app reads it on foreground (and via
+    /// the `lightsout://override` URL) to present the friction sheet, then clears it.
+    public static let pendingOverride = "lightsout.pendingOverride"
+
+    /// `Int` — overrides granted since the last morning reset, driving escalation.
+    public static let overrideCount = "lightsout.overrideCount"
+
+    /// `Date` — expiry of the currently granted override, per phase store name.
+    /// Keyed as `overrideExpiry(for:)` so each phase store expires independently.
+    /// Persisted rather than held in memory so that force-quitting the app during an
+    /// override doesn't strand the shield in the "lifted" state.
+    public static func overrideExpiry(for storeName: String) -> String {
+        "lightsout.overrideExpiry.\(storeName)"
+    }
 }

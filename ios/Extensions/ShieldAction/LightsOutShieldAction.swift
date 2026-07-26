@@ -54,27 +54,23 @@ final class LightsOutShieldAction: ShieldActionDelegate {
             let storeName = PhaseStoreName.name(for: currentPhase)
                 ?? PhaseStoreName.windDown
 
-            if let url = URL(string: "lightsout://override?store=\(storeName)") {
-                // ShieldActionDelegate has no direct URL-open API; the system will
-                // surface the main app in response to `.defer` combined with the
-                // user having already tapped the shield. In practice, we rely on
-                // the user opening the app manually; the store name is retrievable
-                // from PhaseState.current on launch.
-                //
-                // Future refinement: register a custom URL scheme in Info.plist and
-                // use `extensionContext?.open(_:completionHandler:)` where permitted.
-                _ = url
-            }
-
             // Stash the pending override so the app can read it on next foreground.
-            AppGroup.userDefaults.set(storeName, forKey: "lightsout.pendingOverride")
+            // This — not a URL — is the load-bearing handoff: ShieldActionDelegate
+            // has no reliable way to open the containing app, so the user reopens
+            // Lights Out manually and the app picks this key up in
+            // `AppState.refreshPendingOverride()`. The lightsout:// scheme is now
+            // registered as a secondary path for callers that *can* open a URL.
+            AppGroup.userDefaults.set(storeName, forKey: AppGroupKey.pendingOverride)
 
+            // Keep the shield up: the override isn't granted until the user completes
+            // the friction flow in the app.
             completionHandler(.defer)
 
         case .secondaryButtonPressed:
-            // "Go to bed" — dismiss the shield (same-session only; the phase is still
-            // active, so the shield will re-appear on the next app launch attempt).
-            completionHandler(.defer)
+            // "Go to bed" — close the shielded app and return the user to the home
+            // screen. `.defer` here would leave the shield on screen and make this
+            // button indistinguishable from "Request override".
+            completionHandler(.close)
 
         case .firstSecondarySubmenuItemPressed,
              .secondSecondarySubmenuItemPressed,

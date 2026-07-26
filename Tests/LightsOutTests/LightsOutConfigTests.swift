@@ -128,10 +128,9 @@ final class LightsOutConfigTests: XCTestCase {
     }
 
     func testEquatable_different() {
-        var a = LightsOutConfig.defaults
+        let a = LightsOutConfig.defaults
         var b = LightsOutConfig.defaults
         b.amberTime = "21:00"
         XCTAssertNotEqual(a, b)
-        _ = a   // silence unused-mutable warning
     }
 }

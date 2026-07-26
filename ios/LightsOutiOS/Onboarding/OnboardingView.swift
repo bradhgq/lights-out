@@ -135,12 +135,23 @@ struct OnboardingView: View {
             Button("Continue") { advance() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(selectionTotalCount == 0)
+                .disabled(selectionTotalCount == 0 && !isSimulator)
         }
         .familyActivityPicker(isPresented: $showingPicker, selection: $selection)
     }
 
     @State private var showingPicker = false
+
+    /// `FamilyActivityPicker` returns nothing in the simulator, so requiring a non-empty
+    /// selection would block onboarding there and make the rest of the app unreachable
+    /// for UI work. Device builds still require a real selection.
+    private var isSimulator: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
 
     private var phaseTimesStep: some View {
         Form {

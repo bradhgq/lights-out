@@ -37,14 +37,33 @@ struct FrictionOverrideSheet: View {
         self.phaseStoreName = phaseStoreName
 
         let loaded = ConfigStore.load()
-        let isLightsOut = (phaseStoreName == PhaseStoreName.lightsOut)
+        let phase: Phase = {
+            switch phaseStoreName {
+            case PhaseStoreName.amber:     return .amber
+            case PhaseStoreName.windDown:  return .windDown
+            case PhaseStoreName.lightsOut: return .lightsOut
+            default:                       return .windDown
+            }
+        }()
 
-        self.isEmergency = isLightsOut
-        _remainingWait = State(initialValue: loaded.frictionDelaysSeconds.first ?? 60)
-        _phrase = State(initialValue: isLightsOut
+        // Friction escalates across the night: each override already granted makes the
+        // next one costlier, and once the configured steps are spent the user is pushed
+        // onto the emergency path. Previously only `frictionDelaysSeconds.first` was
+        // ever used, so every override cost the same no matter how many came before.
+        let granted = OverrideStore.grantedTonight
+        let delays = loaded.frictionDelaysSeconds
+        let emergency = FrictionEscalation.isEmergency(
+            grantedTonight: granted, delays: delays, phase: phase
+        )
+
+        self.isEmergency = emergency
+        _remainingWait = State(initialValue: FrictionEscalation.delaySeconds(
+            grantedTonight: granted, delays: delays
+        ))
+        _phrase = State(initialValue: emergency
             ? FrictionText.randomEmergencyPhrase()
             : FrictionText.randomWindDownPhrase())
-        _challenge = State(initialValue: isLightsOut
+        _challenge = State(initialValue: emergency
             ? FrictionText.generateRandomChallenge(length: 20)
             : "")
     }
@@ -181,22 +200,15 @@ struct FrictionOverrideSheet: View {
     private func grantOverride(minutes: Int) {
         guard let phase = phaseFromStoreName(phaseStoreName) else { dismiss(); return }
 
-        // Clear the store now.
-        PhaseApplier.clear(phase: phase)
+        // Persist the expiry and clear the store. Persisting is what makes the override
+        // survivable: an in-process timer alone is defeated by force-quitting the app.
+        OverrideStore.grant(phase: phase, minutes: minutes)
 
-        // Schedule a re-apply after `minutes`.
+        // Fast path for while we're still alive. `OverrideStore.reconcile()` is the
+        // durable backstop, running on foreground and at phase boundaries.
         let deadline = DispatchTime.now() + .seconds(minutes * 60)
         DispatchQueue.main.asyncAfter(deadline: deadline) {
-            // Only re-apply if we're still in or past this phase. If the user slept past
-            // morning-reset, the monitor extension will have run `intervalDidEnd` and the
-            // phase won't be active — re-applying would be wrong.
-            let currentlyActive = PhaseState.computedPhase()
-            if currentlyActive == phase
-                || phase == .amber && [.windDown, .lightsOut].contains(currentlyActive)
-                || phase == .windDown && currentlyActive == .lightsOut
-            {
-                PhaseApplier.apply(phase: phase)
-            }
+            OverrideStore.reconcile()
         }
 
         dismiss()

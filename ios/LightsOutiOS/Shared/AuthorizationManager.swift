@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import FamilyControls
 
 /// Thin observable wrapper around `AuthorizationCenter` for Screen Time.
@@ -21,6 +22,15 @@ public final class AuthorizationManager: ObservableObject {
     ///
     /// Safe to call repeatedly; if already authorized, resolves immediately.
     public func requestAuthorization() async {
+        #if targetEnvironment(simulator)
+        // Family Controls cannot authorize in the simulator — the request always fails,
+        // which would otherwise leave onboarding permanently stuck on its second step
+        // and make the entire app unreachable for UI work. Report approval so the rest
+        // of the flow can be exercised. Compiled out entirely on device builds, where
+        // real authorization is the only way through.
+        NSLog("[LightsOut] Simulator build: reporting Screen Time as authorized.")
+        self.status = .approved
+        #else
         do {
             try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
             self.status = AuthorizationCenter.shared.authorizationStatus
@@ -29,6 +39,7 @@ public final class AuthorizationManager: ObservableObject {
             self.status = AuthorizationCenter.shared.authorizationStatus
             NSLog("[LightsOut] requestAuthorization failed: \(error)")
         }
+        #endif
     }
 
     /// Re-read the status from the system (e.g. on app foreground, in case the user

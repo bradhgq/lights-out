@@ -33,6 +33,10 @@ final class LightsOutMonitor: DeviceActivityMonitor {
 
         NSLog("[LightsOutMonitor] intervalDidStart: \(activity.rawValue) → applying \(phase)")
         PhaseApplier.apply(phase: phase)
+
+        // A boundary is the one moment we're guaranteed to run, so it's also where we
+        // clean up overrides that lapsed while the app was dead.
+        OverrideStore.reconcile()
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
@@ -47,6 +51,11 @@ final class LightsOutMonitor: DeviceActivityMonitor {
         // The amber and windDown end events also fire at this time; they're harmless
         // no-ops since idle will get set at least once.
         if phase == .lightsOut {
+            // Drop override bookkeeping at the same time. A leftover expiry would let
+            // reconcile() re-shield during the day, and the nightly counter has to
+            // reset or tomorrow's first override inherits tonight's escalation.
+            OverrideStore.clearAll()
+            OverrideStore.resetNightlyCounter()
             PhaseState.current = .idle
         }
     }

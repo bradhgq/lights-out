@@ -28,6 +28,10 @@ struct LightsOutApp: App {
                         // override while we were backgrounded — re-check.
                         appState.refreshPendingOverride()
                         authorization.refresh()
+                        // Restore any shield whose override lapsed while we weren't
+                        // running. Without this, force-quitting during an override
+                        // leaves the block off until the next phase boundary.
+                        OverrideStore.reconcile()
                     }
                 }
         }
@@ -48,15 +52,10 @@ final class AppState: ObservableObject {
     /// settings.
     @Published var needsOnboarding: Bool
 
-    /// UserDefaults key written by `LightsOutShieldAction` when the user taps the
-    /// primary button on a shield. We poll it on foreground (URL opening from a
-    /// shield-action extension is not reliable).
-    private static let pendingOverrideKey = "lightsout.pendingOverride"
-
     init() {
         self.needsOnboarding = !ConfigStore.hasStoredConfig
         self.pendingOverridePhase = AppGroup.userDefaults
-            .string(forKey: Self.pendingOverrideKey)
+            .string(forKey: AppGroupKey.pendingOverride)
     }
 
     /// Handle `lightsout://override?store=<phase>` URLs from the shield-action ext.
@@ -73,13 +72,13 @@ final class AppState: ObservableObject {
     /// by the scene lifecycle — the shield action writes this key and doesn't wake
     /// the app directly, so we notice on next launch.
     func refreshPendingOverride() {
-        pendingOverridePhase = AppGroup.userDefaults.string(forKey: Self.pendingOverrideKey)
+        pendingOverridePhase = AppGroup.userDefaults.string(forKey: AppGroupKey.pendingOverride)
     }
 
     /// Clear the pending override (after the sheet is dismissed or completed).
     func clearPendingOverride() {
         pendingOverridePhase = nil
-        AppGroup.userDefaults.removeObject(forKey: Self.pendingOverrideKey)
+        AppGroup.userDefaults.removeObject(forKey: AppGroupKey.pendingOverride)
     }
 
     /// Force the onboarding flow to run again (exposed in Settings).

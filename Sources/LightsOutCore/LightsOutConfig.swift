@@ -41,16 +41,21 @@ public struct LightsOutConfig: Codable, Equatable {
 
     // MARK: - Shared behavior
 
-    /// Bedtime checklist items surfaced during wind-down (both platforms).
+    /// Bedtime checklist items surfaced during wind-down.
+    ///
+    /// macOS only at present — the iOS app stores and round-trips this field but has no
+    /// UI for it yet.
     public var checklist: [String]
 
-    /// Override-step delays in seconds. Length controls how many override steps the user
-    /// gets before being escalated to the emergency-override path.
+    /// Escalating forced-wait delays, in seconds, for successive overrides in one night.
+    /// The array's length is how many ordinary overrides are granted before the user is
+    /// pushed onto the emergency path; the values are the wait before each.
+    /// See `FrictionEscalation`, which both platforms use to interpret this.
     public var frictionDelaysSeconds: [Int]
 
     /// If true, invoking the Shortcuts automation named `shortcutName` triggers lights-out.
-    /// On iOS this is also used as the grayscale Shortcut name unless
-    /// `grayscaleShortcutName` is explicitly set.
+    /// macOS only — iOS drives grayscale through `grayscaleOnShortcutName` /
+    /// `grayscaleOffShortcutName` instead.
     public var enableShortcutTrigger: Bool
 
     /// Name of the user-created Shortcut that the app calls via `shortcuts://run-shortcut`.
@@ -68,6 +73,11 @@ public struct LightsOutConfig: Codable, Equatable {
     public var grayscaleOnShortcutName: String?
 
     /// Name of the user-created Shortcut that toggles Color Filters OFF.
+    ///
+    /// Note the app cannot run this automatically at morning reset: only the monitor
+    /// extension runs at that boundary, and extensions can't open Shortcuts URLs. Set up
+    /// a Personal Automation for the morning-reset time instead — the onboarding wizard
+    /// walks through it. This name is used when the app itself is foregrounded.
     public var grayscaleOffShortcutName: String?
 
     // MARK: - CodingKeys (snake_case on disk)

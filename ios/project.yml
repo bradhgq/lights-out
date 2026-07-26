@@ -12,7 +12,7 @@
 
 name: LightsOutiOS
 options:
-  bundleIdPrefix: com.lightsout
+  bundleIdPrefix: fyi.hgq
   deploymentTarget:
     iOS: "17.0"       # minimum; Family Controls works from 16 but shield-action APIs
                       # we rely on are cleaner from 17.
@@ -63,15 +63,23 @@ targets:
         # setup wizard can deep-link to the user's Shortcut library.
         LSApplicationQueriesSchemes:
           - shortcuts
+        # Our own scheme, used by the shield-action extension to hand an override
+        # request back to the app (lightsout://override?store=phase.lightsOut).
+        # Without this registration LightsOutApp's .onOpenURL never fires.
+        CFBundleURLTypes:
+          - CFBundleURLName: fyi.hgq.lightsout
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - lightsout
     entitlements:
       path: LightsOutiOS/Resources/LightsOutiOS.entitlements
       properties:
         com.apple.developer.family-controls: true
         com.apple.security.application-groups:
-          - group.com.lightsout.shared
+          - group.fyi.hgq.lightsout
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.lightsout.ios
+        PRODUCT_BUNDLE_IDENTIFIER: fyi.hgq.lightsout
         TARGETED_DEVICE_FAMILY: "1"    # iPhone only for now
         SUPPORTS_MACCATALYST: NO
 
@@ -110,10 +118,10 @@ targets:
       properties:
         com.apple.developer.family-controls: true
         com.apple.security.application-groups:
-          - group.com.lightsout.shared
+          - group.fyi.hgq.lightsout
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.lightsout.ios.monitor
+        PRODUCT_BUNDLE_IDENTIFIER: fyi.hgq.lightsout.monitor
 
   # ─── Shield configuration extension ─────────────────────────────────────────
   # Renders the "this app is resting" UI when a user taps a shielded app.
@@ -144,10 +152,10 @@ targets:
       properties:
         com.apple.developer.family-controls: true
         com.apple.security.application-groups:
-          - group.com.lightsout.shared
+          - group.fyi.hgq.lightsout
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.lightsout.ios.shield
+        PRODUCT_BUNDLE_IDENTIFIER: fyi.hgq.lightsout.shield
 
   # ─── Shield action extension ────────────────────────────────────────────────
   # Handles button taps on the shield (e.g. "Request override"). Opens the main
@@ -178,7 +186,7 @@ targets:
       properties:
         com.apple.developer.family-controls: true
         com.apple.security.application-groups:
-          - group.com.lightsout.shared
+          - group.fyi.hgq.lightsout
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.lightsout.ios.shieldaction
+        PRODUCT_BUNDLE_IDENTIFIER: fyi.hgq.lightsout.shieldaction
