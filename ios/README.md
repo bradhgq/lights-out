@@ -10,10 +10,36 @@ For now the assumption is sideload-to-personal-device-via-Xcode.
 ## Prerequisites
 
 - macOS with Xcode 16+ (matching the iOS 17 deployment target)
-- An Apple Developer account (free tier is enough for personal sideloading, 7-day
-  re-signing cycle)
+- **A paid Apple Developer Program membership ($99/yr).** A free "Personal Team" is
+  *not* sufficient — see [Account requirements](#account-requirements) below.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - A physical iPhone — Screen Time APIs do **not** function in the simulator
+
+## Account requirements
+
+Running this on a device requires a **paid** membership. Two separate capabilities
+block the free tier, and both are load-bearing here:
+
+- **App Groups** — how the main app hands config and phase state to the three
+  extensions. A free Personal Team cannot use App Groups at all (same for push,
+  iCloud, and associated domains); the build fails at sign time with the
+  provisioning profile missing the capability.
+- **Family Controls** — the capability is only offered to paid teams. Note that
+  *development* profiles can authorize it without Apple's written approval; the
+  formal request is only needed for **distribution**.
+
+There is no code-level workaround: extensions have separate containers, so without
+App Groups the monitor extension cannot read the config at all.
+
+What *does* work on a free account: **simulator builds**, which is enough to verify
+the code compiles and to iterate on UI. Screen Time APIs silently no-op there, so no
+shielding behavior can be tested.
+
+```bash
+xcodebuild -project ios/LightsOutiOS.xcodeproj -scheme LightsOutiOS \
+  -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' \
+  CODE_SIGNING_ALLOWED=NO build
+```
 
 ## Build & install
 
@@ -68,13 +94,31 @@ so you can verify everything is wired up before bedtime.
 
 ## Family Controls entitlement
 
-Personal use on your own device: the entitlement in `*.entitlements` files is enough
-to build and sign with a free developer account or your paid team. You don't need to
-file anything with Apple.
+Personal use on your own device: the entitlement in the `*.entitlements` files is
+enough to build and sign **with a paid team** — you don't need to file anything with
+Apple for development. It will not work on a free Personal Team; see
+[Account requirements](#account-requirements).
 
 If you ever want to distribute: Apple requires you to submit a written request to
 receive the production Family Controls entitlement. Lead time is weeks. Not a concern
 for this personal build.
+
+## Troubleshooting
+
+**XcodeGen silently generates a broken project.** If `xcodegen generate` prints
+`No "base" settings found` (and the same for `debug config` / `iOS`), it failed to
+locate its `SettingPresets` bundle. The generated project then has no
+`PRODUCT_NAME = $(TARGET_NAME)`, every target builds to a nameless product, and
+`xcodebuild` fails with `Multiple commands produce '.../.app'` — which looks like a
+project-spec bug but isn't.
+
+This happens when XcodeGen is installed via Nix and invoked through the profile
+symlink: it resolves `SettingPresets` relative to the invoked path, and the Nix
+profile links `bin/` but not `share/xcodegen/`. Invoke the store binary directly:
+
+```bash
+$(readlink -f $(which xcodegen)) generate
+```
 
 ## Architecture
 

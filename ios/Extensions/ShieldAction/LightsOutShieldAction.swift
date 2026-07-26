@@ -76,6 +76,14 @@ final class LightsOutShieldAction: ShieldActionDelegate {
             // active, so the shield will re-appear on the next app launch attempt).
             completionHandler(.defer)
 
+        case .firstSecondarySubmenuItemPressed,
+             .secondSecondarySubmenuItemPressed,
+             .thirdSecondarySubmenuItemPressed:
+            // Secondary-submenu items, added in the iOS 26 SDK. We never configure a
+            // submenu in ShieldConfiguration, so these are unreachable today; keep the
+            // shield up rather than silently letting an unhandled tap through.
+            completionHandler(.defer)
+
         @unknown default:
             completionHandler(.defer)
         }

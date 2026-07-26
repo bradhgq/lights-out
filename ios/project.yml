@@ -87,7 +87,12 @@ targets:
       # Shared app-group + phase-state + ManagedSettings helpers. Both the main app
       # and the extensions need this code; we include it by reference rather than
       # duplicating, so edits in Shared/ apply to every target at once.
+      #
+      # ShortcutRunner is excluded: it calls UIApplication.shared, which is
+      # unavailable in app extensions and fails to compile in extension targets.
       - path: LightsOutiOS/Shared
+        excludes:
+          - ShortcutRunner.swift
     dependencies:
       - package: LightsOutCore
         product: LightsOutCore
@@ -118,7 +123,10 @@ targets:
     platform: iOS
     sources:
       - path: Extensions/ShieldConfiguration
+      # ShortcutRunner excluded — UIApplication.shared is extension-unavailable.
       - path: LightsOutiOS/Shared
+        excludes:
+          - ShortcutRunner.swift
     dependencies:
       - package: LightsOutCore
         product: LightsOutCore
@@ -149,7 +157,10 @@ targets:
     platform: iOS
     sources:
       - path: Extensions/ShieldAction
+      # ShortcutRunner excluded — UIApplication.shared is extension-unavailable.
       - path: LightsOutiOS/Shared
+        excludes:
+          - ShortcutRunner.swift
     dependencies:
       - package: LightsOutCore
         product: LightsOutCore
