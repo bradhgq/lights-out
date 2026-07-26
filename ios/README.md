@@ -105,6 +105,23 @@ for this personal build.
 
 ## Troubleshooting
 
+**Edits to `project.yml` `info:`/`entitlements:` appear to do nothing.** XcodeGen does
+not overwrite an `Info.plist` or `.entitlements` file that already exists on disk. Those
+files are gitignored and meant to be generated, so a stale copy from an earlier run will
+silently mask your change — the build succeeds, and the key you added simply isn't in the
+built app. Delete them and regenerate:
+
+```bash
+rm -f ios/LightsOutiOS/Resources/Info.plist ios/LightsOutiOS/Resources/*.entitlements \
+      ios/Extensions/*/Info.plist ios/Extensions/*/*.entitlements
+```
+
+To confirm a key actually landed, check the built app rather than the source plist:
+
+```bash
+plutil -extract CFBundleURLTypes xml1 -o - <DerivedData>/…/LightsOutiOS.app/Info.plist
+```
+
 **XcodeGen silently generates a broken project.** If `xcodegen generate` prints
 `No "base" settings found` (and the same for `debug config` / `iOS`), it failed to
 locate its `SettingPresets` bundle. The generated project then has no
