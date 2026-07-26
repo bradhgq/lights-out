@@ -1,9 +1,19 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
+// LightsOutCore is platform-neutral Swift and targets both macOS (for the main app)
+// and iOS (for the companion app in ios/). The app + helper executable targets here
+// stay macOS-only; the iOS app is built via Xcode and links LightsOutCore as a local
+// package reference (see ios/LightsOutiOS.xcodeproj).
 let package = Package(
     name: "LightsOut",
-    platforms: [.macOS(.v13)],
+    platforms: [
+        .macOS(.v13),
+        .iOS(.v17),
+    ],
+    products: [
+        .library(name: "LightsOutCore", targets: ["LightsOutCore"]),
+    ],
     targets: [
         .target(
             name: "LightsOutCore",

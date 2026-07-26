@@ -7,3 +7,9 @@ xcuserdata/
 DerivedData/
 .DS_Store
 result
+
+# iOS: XcodeGen produces these from ios/project.yml. Don't commit — always regenerate.
+ios/LightsOutiOS/Resources/Info.plist
+ios/LightsOutiOS/Resources/*.entitlements
+ios/Extensions/*/Info.plist
+ios/Extensions/*/*.entitlements

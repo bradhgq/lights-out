@@ -1,4 +1,5 @@
 import Foundation
+import LightsOutCore
 
 enum Constants {
     static let configDirectory = FileManager.default.homeDirectoryForCurrentUser
@@ -12,56 +13,35 @@ enum Constants {
 
     static let overrideDurationChoices = [5, 15] // minutes
 
-    static let windDownPhrases = [
-        "I am choosing to stay up and I know I will regret this tomorrow",
-        "Sleep is more important than whatever I think I need to do right now",
-        "I am trading tomorrow's energy for a few more minutes of screen time",
-        "Nothing on the internet is worth being tired at work tomorrow",
-        "Future me will be disappointed that I am making this choice",
-        "I am actively choosing short term comfort over long term wellbeing",
-        "This is not urgent and it can wait until morning when I am rested",
-        "Every minute I stay up now is a minute of sleep I will never get back",
-        "I have never once woken up and wished I had stayed up later last night",
-        "The best version of myself would close the laptop and go to bed now",
-    ]
-
-    static let emergencyPhrases = [
-        "This is a true emergency and I really need to use this app right now",
-        "I solemnly declare this cannot wait until morning and accept the consequences",
-        "I am overriding lights out because there is a genuine urgent situation happening",
-        "I understand this is meant to help me sleep and I am choosing to ignore it",
-        "Nothing about this situation will improve by me staying up but here I am",
-        "I am fully aware that this override exists for emergencies and this better be one",
-        "I promise I will go to bed immediately after handling this one specific thing",
-        "This is not doomscrolling I actually need to do something important right now",
-        "I accept that I am undermining my own sleep goals by typing this sentence",
-        "If I am being honest with myself this is probably not actually an emergency",
-    ]
-
     #if DEV_MODE
     static var devMode = false
     #endif
 
+    /// Fixed short phrase used during dev mode to make testing the friction flow fast.
+    /// Production phrases live in `LightsOutCore.FrictionText`.
+    private static let devWindDownPhrase = "I want to stay up"
+    private static let devEmergencyPhrase = "This is an emergency"
+    private static let devChallenge = "abc123"
+
     static func randomWindDownPhrase() -> String {
         #if DEV_MODE
-        if devMode { return "I want to stay up" }
+        if devMode { return devWindDownPhrase }
         #endif
-        return windDownPhrases.randomElement()!
+        return FrictionText.randomWindDownPhrase()
     }
 
     static func randomEmergencyPhrase() -> String {
         #if DEV_MODE
-        if devMode { return "This is an emergency" }
+        if devMode { return devEmergencyPhrase }
         #endif
-        return emergencyPhrases.randomElement()!
+        return FrictionText.randomEmergencyPhrase()
     }
 
     /// Generate a random string of mixed-case letters and digits that's hard to type.
     static func generateRandomChallenge(length: Int = 20) -> String {
         #if DEV_MODE
-        if devMode { return "abc123" }
+        if devMode { return devChallenge }
         #endif
-        let chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        return String((0..<length).map { _ in chars.randomElement()! })
+        return FrictionText.generateRandomChallenge(length: length)
     }
 }
